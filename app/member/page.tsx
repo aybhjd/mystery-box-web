@@ -63,6 +63,12 @@ const BOX_CONFIGS = [
   },
 ];
 
+type RevealState = {
+  tier: number;
+  rarity: string;
+  reward: string;
+};
+
 export default function MemberHomePage() {
   const router = useRouter();
 
@@ -75,6 +81,12 @@ export default function MemberHomePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
+
+  // state tambahan untuk animasi
+  const [purchaseAnimatingTier, setPurchaseAnimatingTier] =
+    useState<number | null>(null);
+  const [openingBoxId, setOpeningBoxId] = useState<string | null>(null);
+  const [reveal, setReveal] = useState<RevealState | null>(null);
 
   // ------- helpers format -------
 
@@ -214,6 +226,7 @@ export default function MemberHomePage() {
     if (!memberId) return;
     setActionLoading(true);
     setBanner(null);
+    setPurchaseAnimatingTier(tier);
 
     try {
       const { data, error: rpcError } = await supabase.rpc("purchase_box", {
@@ -246,6 +259,8 @@ export default function MemberHomePage() {
       });
     } finally {
       setActionLoading(false);
+      // matikan animasi setelah sebentar
+      setTimeout(() => setPurchaseAnimatingTier(null), 700);
     }
   }
 
@@ -253,6 +268,7 @@ export default function MemberHomePage() {
     if (!memberId) return;
     setActionLoading(true);
     setBanner(null);
+    setOpeningBoxId(boxId);
 
     try {
       const { data, error: rpcError } = await supabase.rpc("open_box", {
@@ -293,6 +309,13 @@ export default function MemberHomePage() {
           hadiahText || "-"
         }`,
       });
+
+      // tampilkan popup reveal
+      setReveal({
+        tier: creditTier,
+        rarity,
+        reward: hadiahText || "-",
+      });
     } catch (e) {
       console.error(e);
       setBanner({
@@ -301,6 +324,7 @@ export default function MemberHomePage() {
       });
     } finally {
       setActionLoading(false);
+      setTimeout(() => setOpeningBoxId(null), 700);
     }
   }
 
@@ -400,39 +424,46 @@ export default function MemberHomePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              {BOX_CONFIGS.map((box) => (
-                <div
-                  key={box.tier}
-                  className={`group relative overflow-hidden rounded-2xl border ${box.border} bg-slate-950/80 px-4 py-4 shadow-lg ${box.halo} transition-transform hover:-translate-y-0.5`}
-                >
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900/40 via-slate-900/10 to-slate-950/80" />
-                  <div className="relative z-10">
-                    <div
-                      className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${box.headerGradient} px-3 py-1 text-[11px] font-semibold text-white`}
-                    >
-                      <span>🎁</span>
-                      <span>{box.title}</span>
+              {BOX_CONFIGS.map((box) => {
+                const activePurchase = purchaseAnimatingTier === box.tier;
+                const cardExtra = activePurchase
+                  ? " ring-2 ring-fuchsia-400/80 animate-pulse scale-[1.01]"
+                  : "";
+
+                return (
+                  <div
+                    key={box.tier}
+                    className={`group relative overflow-hidden rounded-2xl border ${box.border} bg-slate-950/80 px-4 py-4 shadow-lg ${box.halo} transition-transform duration-200 hover:-translate-y-1 hover:shadow-2xl${cardExtra}`}
+                  >
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900/40 via-slate-900/10 to-slate-950/80" />
+                    <div className="relative z-10">
+                      <div
+                        className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${box.headerGradient} px-3 py-1 text-[11px] font-semibold text-white`}
+                      >
+                        <span>🎁</span>
+                        <span>{box.title}</span>
+                      </div>
+
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                        {box.subtitle}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {box.description}
+                      </p>
+
+                      <button
+                        onClick={() => handlePurchase(box.tier)}
+                        disabled={actionLoading}
+                        className="mt-4 w-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-fuchsia-800/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {actionLoading
+                          ? "Memproses..."
+                          : `Beli Box ${box.tier} Credit`}
+                      </button>
                     </div>
-
-                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                      {box.subtitle}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {box.description}
-                    </p>
-
-                    <button
-                      onClick={() => handlePurchase(box.tier)}
-                      disabled={actionLoading}
-                      className="mt-4 w-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-fuchsia-800/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {actionLoading
-                        ? "Memproses..."
-                        : `Beli Box ${box.tier} Credit`}
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
@@ -462,41 +493,48 @@ export default function MemberHomePage() {
                   dulu di atas.
                 </p>
               ) : (
-                inventory.map((box) => (
-                  <div
-                    key={box.id}
-                    className="flex flex-col gap-3 rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 py-3 text-xs text-slate-100 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-50">
-                        Box {box.credit_tier} Credit
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-400">
-                        Kadaluarsa:{" "}
-                        <span className="text-slate-200">
-                          {formatDateTime(box.expires_at)}
-                        </span>
-                      </p>
+                inventory.map((box) => {
+                  const isOpening = openingBoxId === box.id;
+                  const extra = isOpening
+                    ? " border-amber-400/80 animate-pulse scale-[1.01]"
+                    : "";
+
+                  return (
+                    <div
+                      key={box.id}
+                      className={`flex flex-col gap-3 rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 py-3 text-xs text-slate-100 transition-transform duration-200 sm:flex-row sm:items-center sm:justify-between${extra}`}
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-slate-50">
+                          Box {box.credit_tier} Credit
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Kadaluarsa:{" "}
+                          <span className="text-slate-200">
+                            {formatDateTime(box.expires_at)}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-[11px] text-slate-400">
+                          Telah dibayar:{" "}
+                          <span className="text-slate-100">
+                            {box.credit_spent} credit
+                          </span>
+                        </p>
+                        <button
+                          onClick={() =>
+                            handleOpenBox(box.id, box.credit_tier)
+                          }
+                          disabled={actionLoading}
+                          className="rounded-full bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-1.5 text-xs font-semibold text-slate-900 shadow-md shadow-amber-700/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {actionLoading ? "Memproses..." : "Buka Box"}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <p className="text-[11px] text-slate-400">
-                        Telah dibayar:{" "}
-                        <span className="text-slate-100">
-                          {box.credit_spent} credit
-                        </span>
-                      </p>
-                      <button
-                        onClick={() =>
-                          handleOpenBox(box.id, box.credit_tier)
-                        }
-                        disabled={actionLoading}
-                        className="rounded-full bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-1.5 text-xs font-semibold text-slate-900 shadow-md shadow-amber-700/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {actionLoading ? "Memproses..." : "Buka Box"}
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </section>
@@ -534,6 +572,51 @@ export default function MemberHomePage() {
             </section>
           )}
         </div>
+
+        {/* Popup reveal box */}
+        {reveal && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="relative w-full max-w-md rounded-3xl border border-amber-400/80 bg-gradient-to-b from-slate-950 via-amber-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(245,158,11,0.7)]">
+              {/* glow ping di belakang chest */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="h-32 w-32 animate-ping rounded-full bg-amber-400/40" />
+              </div>
+              <div className="relative z-10">
+                <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 via-orange-500 to-amber-700 text-4xl shadow-lg shadow-amber-900/70 animate-bounce">
+                  🧰
+                </div>
+                <p className="text-xs uppercase tracking-[0.25em] text-amber-300">
+                  Box Terbuka!
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-slate-50">
+                  Box {reveal.tier} credit berhasil dibuka
+                </h3>
+                <p className="mt-2 text-sm text-slate-200">
+                  Rarity:{" "}
+                  <span className="font-semibold text-amber-200">
+                    {reveal.rarity}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-slate-200">
+                  Hadiah:{" "}
+                  <span className="font-semibold text-amber-200">
+                    {reveal.reward}
+                  </span>
+                </p>
+                <p className="mt-3 text-[11px] text-slate-300">
+                  Silahkan hubungi Admin / CS untuk klaim hadiah. (Link
+                  kontak bisa kamu tambahkan di member site.)
+                </p>
+                <button
+                  onClick={() => setReveal(null)}
+                  className="mt-4 rounded-full bg-slate-900/80 px-5 py-2 text-xs font-semibold text-slate-100 border border-slate-600/80 hover:border-amber-400 hover:bg-slate-900 transition"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
