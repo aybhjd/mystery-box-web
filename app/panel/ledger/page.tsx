@@ -51,14 +51,12 @@ export default function PanelLedgerPage() {
   const [rowsError, setRowsError] = useState<string | null>(null);
 
   const [searchUsername, setSearchUsername] = useState("");
-  const [kindFilter, setKindFilter] = useState<
-    "ALL" | "TOPUP" | "ADJUST_PLUS" | "ADJUST_MINUS"
-  >("ALL");
+  const [kindFilter, setKindFilter] = useState<"ALL" | "TOPUP" | "ADJUSTMENT">(
+    "ALL",
+  );
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [infoType, setInfoType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [infoType, setInfoType] = useState<"success" | "error" | null>(null);
 
   // ---------- load profil admin/CS ----------
 
@@ -242,10 +240,8 @@ export default function PanelLedgerPage() {
 
   const filteredRows = useMemo(() => {
     return rows
-      // hanya tampilkan mutasi topup/adjust (BOX_PURCHASE disaring di sini)
-      .filter((row) =>
-        ["TOPUP", "ADJUST_PLUS", "ADJUST_MINUS"].includes(row.kind),
-      )
+      // Ledger hanya menampilkan TOPUP & ADJUSTMENT
+      .filter((row) => ["TOPUP", "ADJUSTMENT"].includes(row.kind))
       .filter((row) => {
         if (kindFilter !== "ALL" && row.kind !== kindFilter) {
           return false;
@@ -277,16 +273,15 @@ export default function PanelLedgerPage() {
 
   function formatKind(kind: string) {
     if (kind === "TOPUP") return "Topup";
-    if (kind === "ADJUST_PLUS") return "Adjust (+)";
-    if (kind === "ADJUST_MINUS") return "Adjust (-)";
+    if (kind === "ADJUSTMENT") return "Adjustment (-)";
     return kind;
   }
 
   function kindBadgeClass(kind: string) {
-    if (kind === "TOPUP" || kind === "ADJUST_PLUS") {
+    if (kind === "TOPUP") {
       return "border-emerald-500/60 bg-emerald-950/50 text-emerald-200";
     }
-    if (kind === "ADJUST_MINUS") {
+    if (kind === "ADJUSTMENT") {
       return "border-rose-500/60 bg-rose-950/50 text-rose-200";
     }
     return "border-slate-500/60 bg-slate-900/60 text-slate-200";
@@ -398,8 +393,7 @@ export default function PanelLedgerPage() {
             >
               <option value="ALL">Semua</option>
               <option value="TOPUP">Topup</option>
-              <option value="ADJUST_PLUS">Adjust (+)</option>
-              <option value="ADJUST_MINUS">Adjust (-)</option>
+              <option value="ADJUSTMENT">Adjustment (-)</option>
             </select>
           </div>
         </div>
