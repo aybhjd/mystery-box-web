@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+// Sidebar: sekarang cuma Members (kamu sudah hapus Dashboard)
 const navItems = [
   { href: "/panel/members", label: "Members" }
-  // nanti bisa tambah: Credit, Box Config, History, dll.
 ];
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
@@ -30,7 +30,7 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
       <aside className="hidden md:flex w-64 flex-col border-r border-slate-800 bg-slate-950/95 px-4 py-6">
         <div className="mb-6">
           <div className="text-xs uppercase tracking-[0.25em] text-slate-500">
-            Mystery Box
+            MYSTERY BOX
           </div>
           <div className="mt-1 text-lg font-semibold">Panel</div>
         </div>
@@ -54,20 +54,12 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <button
-          type="button"
-          onClick={() => {
-            void handleLogout();
-          }}
-          className="mt-4 inline-flex items-center justify-center rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 transition"
-        >
-          Logout
-        </button>
+        {/* Logout di sidebar dihapus sesuai request */}
       </aside>
 
       {/* AREA KONTEN */}
       <div className="flex-1 flex flex-col">
-        {/* Top bar untuk mobile (tanpa sidebar) */}
+        {/* Top bar (mobile) tetap ada tombol Logout supaya selalu ada jalan keluar */}
         <div className="md:hidden border-b border-slate-800 px-4 py-3 flex items-center justify-between">
           <span className="text-sm font-semibold">Panel</span>
           <button
