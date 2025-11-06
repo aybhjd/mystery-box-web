@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const navItems = [
-  { href: "/panel/dashboard", label: "Dashboard" },
   { href: "/panel/members", label: "Members" }
   // nanti bisa tambah: Credit, Box Config, History, dll.
 ];
