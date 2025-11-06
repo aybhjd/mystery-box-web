@@ -1,559 +1,569 @@
-# Mystery Box Giveaway – Panel & Member (Checkpoint)
+# Mystery Box System
 
-Project ini adalah sistem **website giveaway dengan konsep mystery box**:
+Sistem web **multi-tenant** untuk giveaway / mystery box dengan dua portal:
 
-- **Panel (Admin/CS)** untuk kelola tenant, member, credit, hadiah, dan probabilitas.
-- **Member site** (tema fantasy RPG) untuk beli dan buka mystery box.
+- **Panel** – untuk Admin / CS:
+  - Atur member & credit
+  - Atur hadiah & probabilitas box
+  - Lihat history transaksi & ledger credit
+- **Member Site** – untuk pemain:
+  - Login dan melihat saldo credit
+  - Beli mystery box (1 / 2 / 3 credit)
+  - Menyimpan box di inventory & membuka box (dengan RNG)
 
-Dokumen ini adalah **checkpoint** kondisi project saat ini:  
-apa saja yang sudah jadi, dan apa yang **belum** dikerjakan.
+Stack utama:
 
-> Catatan: struktur & nama tabel di sini mengikuti implementasi di Supabase yang sudah dibuat selama pairing.
-
----
-
-## 1. Tech Stack
-
-- **Next.js 14** (App Router)
-- **TypeScript**
-- **Supabase**
-  - Auth (email/password)
-  - Postgres (schema + RLS)
-  - RPC (planned / sebagian sudah ada)
-- **Vercel** untuk deploy
+- **Next.js 14** (App Router, TypeScript)
+- **Supabase** (Postgres, Auth, RLS, RPC)
+- **Vercel** (deployment)
+- UI: Tailwind CSS
 
 ---
 
-## 2. High-level Konsep
+## 1. Struktur High Level
 
-### Multi-tenant
+### 1.1. Auth & Tenant
 
-- Sistem mendukung beberapa **tenant**.
-- **1 tenant = 1 panel + 1 member site** (secara konsep).
-- Di DB ada tabel `tenants`, dengan minimal 1 tenant seed (mis. kode `MBOX1`).
-
-### Role User
-
-Enum `user_role` (di DB):
-
-- `ADMIN`
-- `CS`
-- `MEMBER`
-
-**Panel** hanya bisa diakses oleh `ADMIN` dan `CS`.  
-**Member site** hanya bisa diakses oleh `MEMBER`.
-
-### Auth & Login
-
-- Panel login: **email + password**
-  - contoh admin: `mugen8@tech.com` (disesuaikan dengan environment kamu).
-- Member login: **username + password**
-  - secara teknis di Supabase tetap **email**, dengan pola:
-    - `username@member.local`
-  - Panel saat membuat member baru akan:
-    - generate auth user Supabase dengan email `username@member.local`,
-    - simpan `username` di tabel `profiles`.
-
----
-
-## 3. Schema Supabase (ringkasan)
-
-### 3.1. Enum & helper
-
-- `user_role`: `ADMIN | CS | MEMBER`
-- `box_rarity_code`:  
-  `COMMON | RARE | EPIC | SUPREME | LEGENDARY | SPECIAL_LEGENDARY`
-
-Helper functions (dipakai di RLS):
-
-- `current_profile_tenant_id() -> uuid`
-- `current_profile_role() -> user_role`
-
-Keduanya membaca row dari `public.profiles` berdasarkan `auth.uid()`.
-
----
-
-### 3.2. Tabel inti
+- Auth by **Supabase Email/Password**
+- Tabel utama:
 
 #### `public.tenants`
 
 - `id` (uuid, PK)
-- `code` (text, unik, mis. `MBOX1`)
+- `code` (text, unik, contoh: `MB0X1`)
 - `name` (text)
-- dll (bisa ditambah nanti: kontak WA, tema, dsb)
+- `created_at` (timestamptz)
 
 #### `public.profiles`
 
-Mapping user Supabase ke tenant + role.
-
 - `id` (uuid, PK, sama dengan `auth.users.id`)
 - `tenant_id` (uuid, FK → `tenants.id`)
-- `role` (`user_role`)
-- `username` (text, optional, dipakai untuk MEMBER)
-- `credit_balance` (bigint, default 0)
-- `created_at`, `updated_at`
+- `email` (text) – mirror dari auth
+- `username` (text, unik per tenant, dipakai di member site)
+- `role` (enum `user_role`: `ADMIN`, `CS`, `MEMBER`)
+- `credit` (integer) – saldo credit member (0 untuk admin/CS)
+- `created_at` (timestamptz)
 
-**RLS**:
-
-- `ENABLE ROW LEVEL SECURITY`
-- Policy SELECT:
-  - user boleh baca **profil dirinya sendiri**.
-  - `ADMIN`/`CS` boleh baca semua profil dalam **tenant yang sama**.
-- Policy UPDATE:
-  - user boleh update row-nya sendiri,
-  - `ADMIN`/`CS` boleh update row profil di tenant yang sama  
-    (dipakai untuk topup/adjust credit via RPC).
-
-INSERT biasanya dilakukan via **service role** (supabase admin client) → bypass RLS.
-
-#### `public.credit_ledger`
-
-Mencatat mutasi credit setiap member.
-
-Field inti (konsep):
-
-- `id` (uuid, PK)
-- `tenant_id` (uuid, FK → `tenants`)
-- `member_profile_id` (uuid, FK → `profiles`)
-- `admin_profile_id` (uuid, FK → `profiles`) – siapa yang melakukan topup/adjust
-- `amount` / `delta` (bigint)
-- `direction` / `type` (mis. `TOPUP`, `ADJUST_MINUS`, dll)
-- `note` / `description`
-- `created_at`
-
-**RLS**:
-
-- `ENABLE ROW LEVEL SECURITY`
-- Policy SELECT:
-  - member boleh baca ledger miliknya sendiri,
-  - `ADMIN`/`CS` boleh baca semua ledger di tenant-nya.
-- Policy INSERT:
-  - hanya `ADMIN`/`CS` di tenant tersebut yang boleh insert  
-    (dipakai oleh RPC topup/adjust).
-
-> Detail schema tepatnya tersimpan di Supabase, tapi secara konsep ledger sudah dipakai di Panel untuk Topup/Adjust.
+> Catatan:
+> - **Panel** login pakai `email + password`
+> - **Member** login pakai `username + password`, tapi di belakang tetap disamakan ke `email` (mis. `alipcuy@member.local`).
 
 ---
 
-### 3.3. Tabel Box & Hadiah
+## 2. Kredit & Ledger
 
-#### `public.box_rarities`
+### 2.1. Enum
 
-Master rarity (global, semua tenant pakai).
+#### `credit_mutation_kind`
 
-- `id` (uuid, PK)
-- `code` (`box_rarity_code`)
-- `name` (Common, Rare, ...)
-- `color_key` (string, mis. `green`, `blue`, dll)
-- `sort_order` (integer – urutan tampilan)
+- `TOPUP` – tambah credit oleh Admin/CS
+- `ADJUSTMENT` – pengurangan credit manual (Adjust -)
+- `BOX_PURCHASE` – pengurangan credit karena membeli box
 
-Seed default:
+### 2.2. Tabel `public.credit_ledger`
 
-- COMMON
-- RARE
-- EPIC
-- SUPREME
-- LEGENDARY
-- SPECIAL_LEGENDARY
+Mencatat semua mutasi credit, source-of-truth saldo.
 
-#### `public.box_rewards`
-
-Hadiah per rarity per tenant (RNG 2).
+Kolom penting:
 
 - `id` (uuid, PK)
-- `tenant_id` (uuid, FK → `tenants`)
-- `rarity_id` (uuid, FK → `box_rarities`)
-- `label` (text) – contoh: `Saldo 5k`, `HP Android`, `Fine Gold`
-- `reward_type` (text) – `CASH` atau `ITEM`
-- `amount` (bigint | null) – nominal kalau `CASH`
-- `is_active` (boolean)
-- `real_probability` (integer, default 0)
-- `gimmick_probability` (integer, default 0)
-- `created_at`
+- `tenant_id` (uuid)
+- `member_profile_id` (uuid, nullable) – selalu terisi untuk TOPUP/ADJUST/BOX_PURCHASE
+- `delta` (integer) – + / - mutasi credit
+- `balance_after` (integer) – saldo credit setelah mutasi
+- `kind` (`credit_mutation_kind`)
+- `description` (text, nullable) – catatan, contoh: `Topup credit`, `Beli box 2 credit`
+- `created_by_profile_id` (uuid, nullable) – siapa yang membuat mutasi (Admin/CS). Untuk transaksi otomatis bisa null.
+- `created_at` (timestamptz)
 
-Seed default untuk tenant `MBOX1` (sesuai spek awal):
+Index:
+
+- `credit_ledger_pkey`
+- `credit_ledger_member_idx`
+- `credit_ledger_tenant_idx`
+
+### 2.3. Fungsi RPC Credit
+
+Semua update saldo **wajib lewat fungsi**, supaya ledger selalu konsisten:
+
+#### `perform_credit_topup(p_member_id uuid, p_amount integer, p_description text)`
+
+- Hanya untuk **ADMIN/CS** tenant yang sama.
+- Menambah credit member (`+p_amount`), update `profiles.credit`.
+- Insert 1 baris ke `credit_ledger`:
+  - `delta = +p_amount`
+  - `kind = 'TOPUP'`
+  - `balance_after = saldo baru`
+  - `description` diisi dari parameter
+  - `created_by_profile_id` = profil admin/CS yang sedang login.
+- Return: `TABLE(new_balance integer)`.
+
+#### `perform_credit_adjust_down(p_member_id uuid, p_amount integer, p_description text)`
+
+- Hanya untuk **ADMIN/CS** tenant yang sama.
+- Mengurangi credit member (`-p_amount`), tidak boleh minus (< 0).
+- Insert `credit_ledger`:
+  - `delta = -p_amount`
+  - `kind = 'ADJUSTMENT'`.
+
+#### `purchase_box(p_credit_tier integer)`
+
+- Dipanggil dari **Member site** saat membeli box.
+- Langkah:
+  1. Ambil profil member (`auth.uid()` → `profiles`), cek tenant & role `MEMBER`.
+  2. Tentukan harga box dari tier:
+     - 1 credit → minimal COMMON
+     - 2 credit → start dari RARE
+     - 3 credit → start dari EPIC
+  3. Cek saldo credit cukup.
+  4. Kurangi credit member, update `profiles.credit`.
+  5. Insert ke `credit_ledger`:
+     - `delta = -harga`
+     - `kind = 'BOX_PURCHASE'`
+     - `description` contoh: `Beli box 2 credit`.
+  6. Insert row baru di `box_transactions` (status `PURCHASED`) dengan:
+     - `credit_tier`, `credit_spent`, `expires_at = now() + 7 hari`.
+
+- Return (ringkas): `transaction_id`, `status`, `tier`, `credit_before/after`, `expires_at`.
+
+#### `open_box(p_transaction_id uuid)`
+
+- Dipanggil dari **Member site** saat klik “Buka Box”.
+- Validasi:
+  - Transaksi milik member yang sedang login.
+  - Status `PURCHASED`.
+  - Belum `expires_at`.
+- RNG:
+  - Ambil rarity berdasarkan **probabilitas real** (bukan gimmick) untuk tier dan tenant tersebut.
+  - Ambil reward (saldo / item) di dalam rarity tersebut berdasarkan **probabilitas real** juga.
+- Update `box_transactions`:
+  - `status = 'OPENED'`
+  - `rarity`, `reward_label`, `reward_nominal`, `opened_at`.
+- Tidak mengubah credit lagi (karena credit sudah terpotong di `purchase_box`).
+- Return detail box + reward.
+
+---
+
+## 3. Mystery Box & Rewards
+
+### 3.1. Konsep Rarity & Rewards
+
+Rarity (enum `box_rarity`):
+
+- `COMMON` (hijau)
+- `RARE` (biru)
+- `EPIC` (ungu)
+- `SUPREME` (kuning)
+- `LEGENDARY` (emas)
+- `SPECIAL_LEGENDARY` (rainbow)
+
+Contoh kategori hadiah (per tenant, bisa diubah admin):
 
 - Common: 5k, 10k, 15k
 - Rare: 20k, 25k, 35k
 - Epic: 50k, 75k
 - Supreme: 100k, 150k
 - Legendary: 200k, 250k
-- Special Legendary: 300k, 500k, 1.000k, HP Android, Fine Gold
+- Special Legendary: 300k, 500k, 1.000k, HP Android, fine gold
 
-**RLS**:
+### 3.2. Tabel `public.box_rewards`
 
-- `ENABLE ROW LEVEL SECURITY`
-- SELECT:
-  - semua user (ADMIN/CS/MEMBER) cuma bisa baca row dengan `tenant_id = current_profile_tenant_id()`.
-- UPDATE:
-  - hanya `ADMIN` pada tenant tersebut.
-- INSERT:
-  - hanya `ADMIN` pada tenant tersebut  
-    (dipakai saat admin menambah hadiah baru via Panel).
+Per tenant & per rarity menyimpan daftar hadiah + probabilitas.
 
-#### `public.box_credit_rarity_probs`
-
-Konfigurasi probabilitas dapat rarity saat **beli box** (RNG 1).
+Kolom utama (konseptual):
 
 - `id` (uuid, PK)
-- `tenant_id` (uuid, FK → `tenants`)
-- `credit_tier` (integer, `1 | 2 | 3`)
-- `rarity_id` (uuid, FK → `box_rarities`)
+- `tenant_id` (uuid)
+- `rarity` (`box_rarity`)
+- `label` (text) – nama hadiah, mis: `Saldo 5k`, `HP Android`
+- `type` (text / enum bebas) – contoh: `CASH` / `ITEM`
+- `amount` (integer, untuk hadiah saldo – nullable untuk item fisik)
+- `real_percent` (numeric) – probabilitas asli dalam % (dipakai di RNG DB)
+- `gimmick_percent` (numeric) – probabilitas yang akan ditampilkan di UI (teaser saja)
 - `is_active` (boolean)
-- `real_probability` (integer, default 0)
-- `gimmick_probability` (integer, default 0)
-- `created_at`
-- UNIQUE `(tenant_id, credit_tier, rarity_id)`
+- `created_at` (timestamptz)
 
-Seed awal untuk `MBOX1`:
+Constraint di level aplikasi:
 
-- Tier 1 (1 credit): semua rarity ada, `is_active = true`.
-- Tier 2 (2 credit): semua rarity, tapi:
-  - `COMMON` → `is_active = false` (tidak ikut hitung).
-- Tier 3 (3 credit): semua rarity, tapi:
-  - `COMMON` & `RARE` → `is_active = false`.
-
-**RLS**:
-
-- `ENABLE ROW LEVEL SECURITY`
-- SELECT:
-  - semua user di tenant tsb bisa membaca.
-- INSERT & UPDATE:
-  - hanya `ADMIN` di tenant tsb.
+- Untuk setiap kombinasi (tenant + rarity + status aktif):
+  - Total `real_percent` = **100%**
+  - Total `gimmick_percent` = **100%**
+- Kalau ada hadiah dinonaktifkan, sisa hadiah aktif tetap dihitung agar total 100%.
 
 ---
 
-## 4. Fitur Panel – Sudah Jadi ✅
+## 4. Tabel Transaksi Box
 
-### 4.1. Auth Panel
+### 4.1. Enum `box_transaction_status`
 
-- Halaman `/panel/login`
-  - Login dengan **email + password** (Supabase Auth).
-- Layout Panel:
-  - Sidebar kiri (desktop-friendly) dengan menu:
+- `PURCHASED` – box sudah dibeli, belum dibuka
+- `OPENED` – sudah dibuka
+- `EXPIRED` – kadaluarsa (lebih dari 7 hari tidak dibuka)
+
+### 4.2. `public.box_transactions`
+
+Kolom utama:
+
+- `id` (uuid, PK)
+- `tenant_id` (uuid)
+- `member_profile_id` (uuid)
+- `credit_tier` (integer: 1 / 2 / 3)
+- `credit_spent` (integer)
+- `status` (`box_transaction_status`)
+- `rarity` (`box_rarity`, nullable sampai box dibuka)
+- `reward_label` (text, nullable)
+- `reward_nominal` (integer, nullable)
+- `expires_at` (timestamptz)
+- `opened_at` (timestamptz, nullable)
+- `processed` (boolean) – penanda hadiah sudah diproses Admin/CS
+- `processed_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+
+Index:
+
+- `box_transactions_pkey`
+- `box_transactions_tenant_idx`
+- `box_transactions_member_idx`
+- `box_transactions_status_idx`
+- `box_transactions_expires_at_idx`
+
+---
+
+## 5. RLS & Helper Function
+
+### 5.1. Helper
+
+- `current_profile_tenant_id() RETURNS uuid`
+- `current_profile_role() RETURNS user_role`
+
+Dipakai di policy untuk memastikan semua akses scoped ke tenant & role.
+
+### 5.2. Pola Umum RLS (ringkasan)
+
+- **profiles**
+  - Member hanya bisa `SELECT` profilnya sendiri.
+  - Admin/CS bisa `SELECT` semua profil di tenant yang sama.
+  - Update credit hanya lewat fungsi (topup/adjust/purchase), bukan update langsung.
+
+- **tenants**
+  - Admin/CS bisa lihat tenant miliknya.
+  - Member hanya baca tenant yang berkaitan dengan profilnya.
+
+- **box_rewards**
+  - Select: semua role di tenant yang sama (panel & member).
+  - Insert/Update/Delete: hanya Admin di tenant yang sama.
+  - Insert via panel UI, bukan langsung bebas.
+
+- **box_transactions**
+  - Member: hanya bisa `SELECT` transaksi miliknya sendiri.
+  - Panel (Admin/CS): bisa `SELECT` semua transaksi di tenant.
+  - Insert `PURCHASED`: hanya lewat fungsi `purchase_box`.
+  - Update status / reward: hanya lewat `open_box` dan update `processed` dari Panel.
+
+- **credit_ledger**
+  - Insert:
+    - Member: hanya via `purchase_box` (kind `BOX_PURCHASE`).
+    - Admin/CS: via `perform_credit_topup` & `perform_credit_adjust_down`.
+  - Select:
+    - Panel: semua ledger di tenant.
+    - Member: (opsional, saat ini ledger hanya dipakai panel).
+
+---
+
+## 6. Frontend – Panel
+
+Base route: `/panel`
+
+### 6.1. Auth & Layout
+
+- `/panel/login`
+  - Form login **email + password** (Supabase).
+  - Setelah sukses, redirect ke `/panel/members` (dashboard awal).
+- Layout panel:
+  - Sidebar kiri dengan menu:
     - `Members`
+    - `Ledger`
+    - `History`
     - `Boxes`
-  - Header berisi info user yang sedang login + dropdown:
-    - Ubah password sendiri
+  - Bagian atas kanan: email user login dengan dropdown:
+    - Ganti password sendiri
     - Logout
-- Hanya `ADMIN` & `CS` yang bisa mengakses halaman Panel.
 
----
-
-### 4.2. Halaman **Members** (`/panel/members`)
+### 6.2. Members – `/panel/members`
 
 Fitur:
 
-1. **List Member**
-   - Tabel berisi:
-     - username
-     - email (internal, `username@member.local`)
-     - role (MEMBER)
-     - credit balance
-     - kolom aksi
-   - Filter di header:
-     - search by username.
+- Tabel member per tenant:
+  - Kolom: Username, Credit, Dibuat, Aksi
+- Filter:
+  - Search box **username**
+- Aksi per member:
+  - **Topup**
+    - Modal: amount + catatan (description).
+    - Memanggil `perform_credit_topup`.
+    - Setelah sukses, update credit di UI + pesan sukses.
+  - **Adjust (-)**
+    - Modal: amount + catatan.
+    - Memanggil `perform_credit_adjust_down`.
+    - Credit tidak boleh minus.
+  - **Password**
+    - Modal untuk reset password member (via API route yang memakai service-role Supabase).
 
-2. **New Member**
-   - Tombol “New Member” → buka modal:
-     - input `Username`
-     - input `Password` + `Konfirmasi Password`
-     - input optional `Initial credit`
-   - Saat submit:
-     - membuat user baru di Supabase Auth dengan email `username@member.local`.
-     - membuat row di `profiles`:
-       - `tenant_id` mengikuti admin/CS yang sedang login,
-       - `role = MEMBER`,
-       - `username`,
-       - `credit_balance` sesuai initial credit.
-     - kalau initial credit > 0, seharusnya juga mencatat entry di `credit_ledger` (behaviour tergantung implementasi RPC/route yang sudah dibuat).
-   - Validasi:
-     - username wajib,
-     - password wajib,
-     - password = konfirmasi password,
-     - initial credit kalau diisi harus angka ≥ 0.
+- Tombol **New Member**:
+  - Modal: username + password.
+  - Membuat:
+    - User di `auth.users` (email internal, mis: `username@member.local`).
+    - Row di `profiles` dengan:
+      - `tenant_id` = tenant admin/CS
+      - `role = MEMBER`
+      - `credit = 0`.
 
-3. **Topup Credit Member**
-   - Di setiap row member ada tombol **Topup**:
-     - modal input nominal (positive),
-     - optional note.
-   - Saat submit:
-     - update `profiles.credit_balance` member,
-     - insert ke `credit_ledger` dengan tenant + siapa admin/CS yang melakukan.
-   - RLS menjamin:
-     - hanya `ADMIN`/`CS` di tenant sama yang boleh melakukan.
+### 6.3. Boxes – `/panel/boxes`
 
-4. **Adjust (Minus) Credit Member**
-   - Tombol **Adjust**:
-     - modal input nominal minus (mengurangi credit),
-     - misal karena koreksi manual.
-   - Serupa dengan Topup, tapi arah mutasi kebalik.
+Fitur:
 
-5. **Reset Password Member**
-   - Tombol **Password** di row member:
-     - modal untuk set password baru.
-   - Menggunakan Supabase Admin (service key) untuk update password Auth user tersebut.
+- Tabs per rarity: `Common`, `Rare`, `Epic`, `Supreme`, `Legendary`, `Special Legendary`.
+- Per tab, tabel hadiah:
+  - Kolom: Nama Hadiah, Type, Nominal, Real (%), Gimmick (%), Status (Aktif).
+  - Bisa **tambah / edit / hapus** baris hadiah.
+- Validasi sebelum simpan:
+  - Hanya menghitung hadiah **aktif**.
+  - Total Real(%) = 100.
+  - Total Gimmick(%) = 100.
+  - Jika tidak 100, tampilkan error dan **tidak boleh** simpan.
+- Tombol **Simpan**:
+  - Menyimpan ke `public.box_rewards` (upsert).
 
-6. **Ubah Password Admin/CS Sendiri**
-   - Di header, dropdown user → menu `Password`:
-     - modal untuk ganti password login panel sendiri.
+### 6.4. History – `/panel/history`
 
-7. **Logout**
-   - Menu logout di dropdown user.
+Fitur:
 
----
+- Menampilkan riwayat `box_transactions` per tenant.
 
-### 4.3. Halaman **Boxes** (`/panel/boxes`)
+Kolom utama:
 
-Halaman ini punya **dua blok besar**:
+- Username
+- Tier (1/2/3)
+- Credit (spent)
+- Rarity (kalau sudah dibuka)
+- Reward (label / nominal)
+- Status (`Purchased` / `Opened` / `Expired`)
+- Dibuat (created_at)
+- Opened / Expired
+- Processed (flag)
 
-#### A. Konfigurasi Hadiah per Rarity (RNG 2 – saat buka box)
+Filter:
 
-Untuk **setiap rarity** (Common, Rare, Epic, dst):
+- Username (search box)
+- Status (dropdown)
+- Tier (dropdown)
 
-- Menampilkan card berisi:
-  - badge rarity (warna sesuai tema),
-  - kode rarity,
-  - info:
-    - total Real (aktif)
-    - total Gimmick (aktif)
+Aksi:
 
-- Tabel hadiah per rarity:
-  - kolom:
-    - Hadiah (label)
-    - Tipe (CASH / ITEM)
-    - Nominal
-    - Real (%) – input number
-    - Gimmick (%) – input number
-    - Status (Aktif / Non-aktif – toggle)
-    - Aksi (Edit) – hanya untuk `ADMIN`
-  - Admin bisa:
-    - mengubah `Real %` dan `Gimmick %` untuk setiap hadiah,
-    - mengaktifkan / menonaktifkan hadiah,
-    - mengedit hadiah (nama, tipe, nominal) lewat modal,
-    - menambah hadiah baru via tombol **“Tambah Hadiah”** yang:
-      - memilih rarity tujuan,
-      - input label hadiah,
-      - pilih tipe CASH/ITEM,
-      - input nominal (kalau CASH),
-      - pilih status awal aktif/non-aktif.
+- **Process**:
+  - Hanya muncul jika status `OPENED` dan `processed = false`.
+  - Klik button akan men-set `processed = true` (dan `processed_at`).
+  - Dipakai Admin/CS sebagai penanda hadiah fisik/saldo sudah benar-benar dikirim manual.
 
-- Aturan probabilitas (Real & Gimmick):
-  - Hanya hadiah dengan `is_active = true` yang dihitung.
-  - Total Real% (aktif) untuk 1 rarity **harus 100**.
-  - Total Gimmick% (aktif) untuk 1 rarity **harus 100**.
-  - Tombol **“Simpan konfigurasi”**:
-    - **disable** kalau total Real ≠ 100 atau total Gimmick ≠ 100.
-    - saat klik:
-      - melakukan `UPDATE` ke `box_rewards` (tanpa `UPSERT`).
-  - Gimmick % hanya untuk FE (teasing), **tidak** dipakai RNG di backend.
+### 6.5. Ledger – `/panel/ledger`
 
-#### B. Probabilitas Rarity per Credit Tier (RNG 1 – saat beli box)
+Menampilkan `credit_ledger` per tenant.
 
-Bagian kedua di bawah:
+Kolom:
 
-- Tiga section:
-  - Box 1 Credit
-  - Box 2 Credit (mulai Rare)
-  - Box 3 Credit (mulai Epic)
-- Di setiap section:
-  - tabel list rarity yang boleh:
-    - Tier 1: semua rarity.
-    - Tier 2: `COMMON` otomatis disembunyikan (tidak ikut UI & hitungan).
-    - Tier 3: `COMMON` & `RARE` disembunyikan.
-  - kolom:
-    - Rarity (badge)
-    - Real (%)
-    - Gimmick (%)
-    - Status (Aktif / Non-aktif)
-  - Aturan:
-    - hanya rarity `is_active = true` yang dihitung di total.
-    - total Real% (aktif) untuk 1 tier **harus 100**.
-    - total Gimmick% (aktif) untuk 1 tier **harus 100**.
-  - Tombol **“Simpan konfigurasi”** per tier:
-    - disable kalau total ≠ 100,
-    - melakukan `UPDATE` ke `box_credit_rarity_probs` per row.
+- Waktu (`created_at`)
+- Username member
+- Mutasi (contoh: `+10 credit`, `-3 credit`)
+- Saldo Akhir (balance_after)
+- Jenis:
+  - “Topup”
+  - “Adjustment (-)”
+  - “Beli box”
+- Keterangan (`description`)
+- Dibuat oleh (email admin/CS, bisa `-` untuk mutasi otomatis)
+
+Filter:
+
+- Search username
+- Jenis mutasi: `Semua`, `Topup`, `Adjustment (-)`, `Beli box`.
+
+> Ledger sekarang sudah menampilkan **TOPUP**, **ADJUSTMENT**, dan **BOX_PURCHASE**, jadi total credit akan konsisten dengan mutasi.
 
 ---
 
-## 5. Fitur Member Site – Status Saat Ini
+## 7. Frontend – Member Site
 
-### Sudah ada ✅
+Base route: `/member`
 
-- Halaman login member (path misalnya `/member/login`):
-  - login menggunakan **username + password**,
-  - di-backend tetap pakai Supabase Auth (email `username@member.local`).
-- Supabase session sudah bisa dipakai di sisi member (basic auth flow).
+### 7.1. Auth
 
-### Belum dikerjakan ❌
+- `/member/login`
+  - Form: **username + password**.
+  - Di belakang:
+    - Username dikonversi ke email internal (mis: `alipcuy` → `alipcuy@member.local`).
+    - Login pakai Supabase Email/Password.
 
-- Halaman utama member (dashboard):
-  - tampilan credit user,
-  - daftar box (1/2/3 credit) yang bisa dibeli.
-- Halaman toko / pembelian box:
-  - tombol beli box per credit tier.
-  - panggilan RPC `purchase_box`.
-- Halaman inventory (box yang sudah dibeli, belum dibuka):
-  - list box dengan sisa waktu (7 hari),
-  - tombol Buka yang memanggil RPC `open_box`.
-- Halaman / section history member:
-  - list box yang sudah dibuka + hadiah yang didapat.
-- **Animasi**:
-  - animasi saat beli box (RNG rarity),
-  - animasi saat buka box (RNG hadiah).
-- Popup “Silahkan Hubungi Kami” setelah box dibuka:
-  - redirect ke kontak admin (mis. link WhatsApp dari tabel `tenants`).
+### 7.2. Halaman Utama – `/member`
 
----
+Bagian atas:
 
-## 6. Konsep RNG & Probabilitas (Ringkasan)
+- Judul: **Masuk ke Dunia Fantasy**
+- Subjudul: deskripsi singkat.
+- Kanan atas:
+  - “Login sebagai {username}”
+  - Badge credit: `{credit} credit`
+  - Tombol Logout.
 
-**RNG 1 – Saat beli box**
+#### 7.2.1. Pembelian Box
 
-- Input: pilihan member: box 1 credit / 2 credit / 3 credit.
-- Sumber data:
-  - tabel `box_credit_rarity_probs` (Real probability).
-- Aturan:
-  - Tier 1: boleh Common ke atas.
-  - Tier 2: mulai dari Rare.
-  - Tier 3: mulai dari Epic.
-  - Hanya row `is_active = true` yang dipakai.
-  - Total Real% per tier = **100**.
-  - Gimmick% per tier hanya dipakai FE untuk `info persentase` dan animasi, tidak mempengaruhi RNG backend.
+3 kartu box:
 
-**RNG 2 – Saat buka box**
+1. **Box 1 Credit**
+   - Minimal dapat COMMON.
+   - Tombol: **Beli Box 1 Credit** → panggil `purchase_box(1)`.
 
-- Input: rarity yang sudah ditentukan saat beli.
-- Sumber data:
-  - tabel `box_rewards` untuk rarity tersebut (Real probability).
-- Aturan:
-  - Hanya hadiah `is_active = true` yang dihitung.
-  - Total Real% per rarity = **100**.
-  - Gimmick% per hadiah hanya untuk FE (teasing / info di UI).
+2. **Box 2 Credit**
+   - Start dari RARE ke atas (COMMON tidak mungkin).
+   - Tombol: **Beli Box 2 Credit** → `purchase_box(2)`.
 
----
+3. **Box 3 Credit**
+   - Start dari EPIC (COMMON & RARE tidak mungkin).
+   - Tombol: **Beli Box 3 Credit** → `purchase_box(3)`.
 
-## 7. Checkpoint – TODO / Belum Dikerjakan
+Setelah beli:
 
-Berikut ini daftar TODO penting yang **belum** diimplementasi per checkpoint ini:
+- Banner sukses di atas:  
+  `Berhasil membeli box 2 credit. Rarity: Rare (RARE).`
+- Card “Pembelian Terakhir” yang menampilkan:
+  - Tier
+  - Rarity (kalau sudah ditentukan oleh RNG beli – optional / sesuai implementasi sekarang)
+  - Credit sebelum & sesudah beli
+  - Expired date (7 hari)
 
-### 7.1. Step 1 – Struktur transaksi box di Supabase
+Credit saldo di header ikut update.
 
-Belum ada tabel khusus untuk menyimpan transaksi mystery box.  
-Rencana (nama bisa berubah):
+#### 7.2.2. Inventory Box
 
-- Tabel `box_transactions` (atau serupa) dengan kolom:
-  - `id`
-  - `tenant_id`
-  - `member_profile_id`
-  - `credit_tier` (1 / 2 / 3)
-  - `credit_spent`
-  - `credit_ledger_id` (relasi ke tabel ledger)
-  - `rarity_id` (hasil RNG 1 saat beli)
-  - `status` (`PURCHASED`, `OPENED`, `EXPIRED`)
-  - `reward_id` (FK ke `box_rewards`, diisi saat box dibuka)
-  - `expires_at` (7 hari sejak pembelian)
-  - `opened_at`
-  - `processed` (bool – sudah diproses admin/CS atau belum)
-  - `processed_by_profile_id`
-  - `processed_at`
+Section: **Inventory Box Kamu**
 
-- RLS:
-  - member hanya boleh melihat transaksi miliknya,
-  - `ADMIN`/`CS` boleh melihat seluruh transaksi di tenant-nya,
-  - `UPDATE processed` dan field admin hanya boleh oleh `ADMIN`/`CS`.
+- Menampilkan list box dari `box_transactions` dengan:
+  - Status `PURCHASED`
+  - Belum `expires_at`
+- Per item:
+  - Info: `Box 1/2/3 Credit`
+  - Tanggal kadaluarsa.
+  - Tombol **Buka Box**.
 
-### 7.2. Step 2 – RPC untuk beli & buka box
+Jika box sudah kadaluarsa, back-end (`purchase_box` / scheduled logic) menandai `EXPIRED` dan tidak tampil lagi di inventory.
 
-Belum dibuat:
+#### 7.2.3. Buka Box
 
-1. `purchase_box(credit_tier int)`
-   - Validasi:
-     - role user = MEMBER,
-     - credit mencukupi,
-     - tenant valid.
-   - Logika:
-     - ambil konfigurasi Real dari `box_credit_rarity_probs`,
-     - RNG memilih `rarity_id` (RNG 1),
-     - potong `credit_balance` member,
-     - insert ke `credit_ledger`,
-     - insert ke `box_transactions` dengan status `PURCHASED`, set `expires_at = now() + interval '7 days'`,
-     - return ke FE (rarity, sisa credit, info transaksi).
+Tombol **Buka Box** memanggil `open_box(transaction_id)`:
 
-2. `open_box(transaction_id uuid)`
-   - Validasi:
-     - transaksi milik user sekarang (member),
-     - status `PURCHASED`,
-     - belum expired (`now() < expires_at`).
-   - Logika:
-     - ambil hadiah dari `box_rewards` untuk `rarity_id` transaksi,
-     - pakai Real probability → RNG pilih `reward_id`,
-     - update `box_transactions`:
-       - status `OPENED`,
-       - set `reward_id`, `opened_at`,
-     - return hadiah ke FE (label, type, nilai) untuk animasi.
+- Jika sukses:
+  - Box hilang dari daftar inventory.
+  - Banner hijau di atas:  
+    `Box 1 credit terbuka! Rarity: Common (COMMON) — Hadiah: Saldo 5k`
+  - Card besar **“Box Terakhir Dibuka”** (warna oranye) berisi:
+    - Info box (tier, rarity, tenant)
+    - Hadiah (label + nominal)
+    - Waktu buka
+    - Text: *“Setelah ini, hadiah akan ditindaklanjuti oleh Admin / CS via kontak yang disediakan di member site.”*
+- Di belakang, `box_transactions` di-update (status `OPENED`) dan `History` di Panel ikut ter-update.
 
-> Gimmick prob tetap hanya untuk FE, **tidak** dipakai di fungsi-fungsi ini.
-
-### 7.3. Step 3 – Halaman History di Panel
-
-Belum dibuat:
-
-- Menu `History` di sidebar panel.
-- Halaman yang menampilkan daftar `box_transactions`:
-  - filter berdasarkan username, status, credit tier, date range.
-  - kolom:
-    - username member,
-    - credit spent,
-    - kode transaksi / ID,
-    - credit tier,
-    - rarity,
-    - reward (kalau sudah buka),
-    - status (Purchased / Opened / Expired),
-    - processed flag + siapa yang memproses.
-- Tombol `Process`:
-  - misalnya checkbox / tombol per row:
-    - hanya `ADMIN`/`CS` yang bisa klik,
-    - set `processed = true`, `processed_by_profile_id`, `processed_at`.
-
-### 7.4. Step 4 – Member Site: store, inventory, animasi
-
-Belum dibuat:
-
-- **Store / Shop** (member):
-  - tampilan 3 box (1 / 2 / 3 credit),
-  - informasi credit member,
-  - info persentase **gimmick** (teasing),
-  - tombol beli yang memanggil RPC `purchase_box`.
-
-- **Inventory**:
-  - list box dengan status `PURCHASED` dan belum expired (7 hari),
-  - countdown sisa waktu dari `expires_at`,
-  - tombol `Buka` (call `open_box`),
-  - jika sudah lewat 7 hari, status berubah `EXPIRED` dan box hilang dari inventory member (tapi tetap ada di DB / history panel).
-
-- **History member**:
-  - list box yang sudah dibuka,
-  - hadiah yang didapat,
-  - status processed oleh admin atau belum (opsional).
-
-- **Animasi & UX**:
-  - animasi beli box (RNG 1, reveal rarity dengan efek “wah” & “deg-degan”),
-  - animasi buka box (RNG 2, reveal hadiah),
-  - popup “Silahkan Hubungi Kami” setelah reveal hadiah:
-    - link ke kontak admin (mis. WA) yang idealnya diambil dari konfigurasi tenant.
+> **Catatan:** Animasi beli & buka box belum dibuat – masih versi statis. Efek “wah” & animasi akan dibuat di tahap berikutnya.
 
 ---
 
-## 8. Cara Update README ke Depan
+## 8. Checkpoint – Status Sekarang
 
-Setiap kali selesai 1 blok besar (mis. “Step 1 – Struktur transaksi box”):
+### 8.1. Sudah Selesai
 
-- Tambahkan di README:
-  - bagian “Sudah Jadi ✅” untuk fitur tersebut,
-  - pindahkan poin dari “Belum dikerjakan ❌” ke deskripsi fitur yang sudah jadi,
-  - beri tanggal checkpoint kalau perlu.
+- ✅ Struktur database tenant, profiles, box_rewards, box_transactions, credit_ledger
+- ✅ Enum dan fungsi helper (role & tenant)
+- ✅ RLS dasar untuk semua tabel core (tenant, profiles, box_rewards, box_transactions, credit_ledger)
+- ✅ RPC:
+  - `perform_credit_topup`
+  - `perform_credit_adjust_down`
+  - `purchase_box`
+  - `open_box`
+- ✅ Panel:
+  - Login Admin/CS
+  - Sidebar + layout dasar
+  - Members:
+    - List member by tenant
+    - New member
+    - Topup
+    - Adjust (-)
+    - Reset password member
+  - Boxes:
+    - CRUD hadiah per rarity
+    - Validasi real/gimmick % = 100% (aktif saja)
+  - History:
+    - List transaksi box
+    - Filter (username, status, tier)
+    - Tombol Process untuk transaksi OPENED
+  - Ledger:
+    - List mutasi credit (TOPUP, ADJUSTMENT, BOX_PURCHASE)
+    - Filter username & jenis mutasi
+- ✅ Member site:
+  - Login username+password
+  - Info credit
+  - Beli box 1/2/3 credit (terhubung ke `purchase_box`)
+  - Inventory box + tombol Buka Box (terhubung ke `open_box`)
+  - Card “Box Terakhir Dibuka”
 
-README ini jadi semacam **changelog high-level** versi human-friendly, supaya kita nggak “salah sambung timeline” waktu lanjut development berikutnya.
+### 8.2. TODO Berikutnya
+
+Fokus terbesar berikutnya: **mempercantik Member Site + experience buka box.**
+
+Beberapa ide/PR konkret:
+
+1. **Tema Fantasy RPG di Member Site**
+   - Background gradien / ilustrasi bertema fantasy.
+   - Font title yang lebih “magical”.
+   - Card box yang lebih seperti “chest / loot box”.
+
+2. **Animasi**
+   - Animasi saat **beli box** (mis. chest muncul / gem berputar).
+   - Animasi saat **buka box**:
+     - Glow / particle effect
+     - Reveal rarity dengan warna berbeda (Common hijau, Rare biru, dst).
+     - Hentakan kecil saat hadiah muncul.
+
+3. **UI probabilitas “gimmick”**
+   - Tombol info di member site: “Lihat peluang hadiah”.
+   - Menampilkan probability gimmick (yang di-set di Panel, bukan real) per tier dan rarity:
+     - `1 credit` → breakdown gimmick
+     - `2 credit` → start dari Rare
+     - `3 credit` → start dari Epic
+   - Data diambil dari `box_rewards` (field gimmick).
+
+4. **UX lainnya**
+   - Link / tombol “Hubungi Admin/CS” (WhatsApp / Telegram) setelah box dibuka.
+   - Notifikasi kalau ada box yang kadaluarsa (opsional).
+   - Pagination / infinite scroll untuk History & Ledger kalau data sudah banyak.
+
+5. **Hardening & nice-to-have**
+   - Tambah loading skeleton yang lebih halus di semua list.
+   - Tambah guard ekstra di client (mis. disable tombol kalau kredit tidak cukup, di samping check di RPC).
+   - Dokumentasi singkat untuk cara setup tenant baru (seed SQL / manual steps).
 
 ---
+
+## 9. Environment Variables (ringkas)
+
+Minimal env yang dipakai Next.js:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Untuk API route (admin actions):
+
+- `SUPABASE_SERVICE_ROLE_KEY`  
+  → **hanya dipakai di server-side** (API route / server action), jangan pernah expose ke client.
+
+---
+
+Checkpoint README ini menggambarkan kondisi project **per sekarang**.  
+Nanti kalau kita sudah mulai masuk ke tema Fantasy RPG + animasi + gimmick probability, README ini bisa di-update di bagian **TODO** dan deskripsi Member Site. Setelah README ini kamu commit, kita bisa langsung lanjut ngulik tampilan dan animasi di member site 😄
