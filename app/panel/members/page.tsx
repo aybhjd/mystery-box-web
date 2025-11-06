@@ -8,6 +8,16 @@ import {
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+async function getAccessToken() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error("No active session");
+  }
+  return session.access_token;
+}
+
 type CurrentProfile = {
   id: string;
   tenant_id: string | null;
@@ -508,6 +518,11 @@ export default function PanelMembersPage() {
 
       const created: MemberRow = json.member;
       setMembers((prev) => [...prev, created]);
+      setNewMemberLoading(false);
+      setNewMemberModalOpen(false);
+      setNewUsername("");
+      setNewPassword("");
+      setNewInitialCredit("");
       closeNewMemberModal();
     } catch (err) {
       console.error(err);
