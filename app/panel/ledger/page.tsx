@@ -51,12 +51,14 @@ export default function PanelLedgerPage() {
   const [rowsError, setRowsError] = useState<string | null>(null);
 
   const [searchUsername, setSearchUsername] = useState("");
-  const [kindFilter, setKindFilter] = useState<"ALL" | "TOPUP" | "ADJUSTMENT">(
-    "ALL",
-  );
+  const [kindFilter, setKindFilter] = useState<
+    "ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE"
+  >("ALL");
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [infoType, setInfoType] = useState<"success" | "error" | null>(null);
+  const [infoType, setInfoType] = useState<"success" | "error" | null>(
+    null,
+  );
 
   // ---------- load profil admin/CS ----------
 
@@ -240,8 +242,10 @@ export default function PanelLedgerPage() {
 
   const filteredRows = useMemo(() => {
     return rows
-      // Ledger hanya menampilkan TOPUP & ADJUSTMENT
-      .filter((row) => ["TOPUP", "ADJUSTMENT"].includes(row.kind))
+      // Ledger menampilkan semua mutasi credit utama
+      .filter((row) =>
+        ["TOPUP", "ADJUSTMENT", "BOX_PURCHASE"].includes(row.kind),
+      )
       .filter((row) => {
         if (kindFilter !== "ALL" && row.kind !== kindFilter) {
           return false;
@@ -274,6 +278,7 @@ export default function PanelLedgerPage() {
   function formatKind(kind: string) {
     if (kind === "TOPUP") return "Topup";
     if (kind === "ADJUSTMENT") return "Adjustment (-)";
+    if (kind === "BOX_PURCHASE") return "Beli box";
     return kind;
   }
 
@@ -281,7 +286,8 @@ export default function PanelLedgerPage() {
     if (kind === "TOPUP") {
       return "border-emerald-500/60 bg-emerald-950/50 text-emerald-200";
     }
-    if (kind === "ADJUSTMENT") {
+    if (kind === "ADJUSTMENT" || kind === "BOX_PURCHASE") {
+      // dua-duanya mengurangi credit → merah
       return "border-rose-500/60 bg-rose-950/50 text-rose-200";
     }
     return "border-slate-500/60 bg-slate-900/60 text-slate-200";
@@ -339,8 +345,8 @@ export default function PanelLedgerPage() {
             Ledger Credit Member
           </h1>
           <p className="text-xs text-slate-400">
-            Riwayat mutasi credit hasil topup dan penyesuaian (adjust) di
-            tenant ini. Pembelian box ada di menu History.
+            Riwayat semua mutasi credit (topup, adjust, dan pembelian box)
+            di tenant ini. Detail box bisa dilihat di menu History.
           </p>
         </div>
 
@@ -394,6 +400,7 @@ export default function PanelLedgerPage() {
               <option value="ALL">Semua</option>
               <option value="TOPUP">Topup</option>
               <option value="ADJUSTMENT">Adjustment (-)</option>
+              <option value="BOX_PURCHASE">Beli box</option>
             </select>
           </div>
         </div>
