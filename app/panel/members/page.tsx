@@ -243,4 +243,124 @@ export default function PanelMembersPage() {
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-300">
                     Aksi
-                  </
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-6 text-center text-slate-400"
+                    >
+                      Belum ada member di tenant ini.
+                    </td>
+                  </tr>
+                ) : (
+                  members.map((m) => (
+                    <tr
+                      key={m.id}
+                      className="border-t border-slate-800/80 hover:bg-slate-800/60"
+                    >
+                      <td className="px-4 py-3 align-middle">
+                        {m.username ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 align-middle">
+                        {m.credit_balance} credit
+                      </td>
+                      <td className="px-4 py-3 align-middle text-slate-400">
+                        {formatDate(m.created_at)}
+                      </td>
+                      <td className="px-4 py-3 align-middle text-right">
+                        <button
+                          type="button"
+                          onClick={() => openTopupModal(m)}
+                          className="inline-flex items-center rounded-lg border border-emerald-500/60 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10 transition"
+                        >
+                          Topup
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal Topup */}
+      {topupMember && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+            <h2 className="text-lg font-semibold">
+              Topup Credit – {topupMember.username ?? "Tanpa username"}
+            </h2>
+            <p className="text-xs text-slate-400">
+              Credit saat ini:{" "}
+              <span className="font-mono text-emerald-300">
+                {topupMember.credit_balance}
+              </span>
+            </p>
+
+            <form onSubmit={handleTopupSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="topup-amount">
+                  Jumlah credit
+                </label>
+                <input
+                  id="topup-amount"
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="contoh: 10"
+                  value={topupAmount}
+                  onChange={(e) => setTopupAmount(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="topup-note">
+                  Catatan (opsional)
+                </label>
+                <textarea
+                  id="topup-note"
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                  placeholder="mis. Topup manual dari CS"
+                  value={topupNote}
+                  onChange={(e) => setTopupNote(e.target.value)}
+                />
+              </div>
+
+              {topupError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {topupError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeTopupModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={topupLoading}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={topupLoading || !topupAmount}
+                  className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {topupLoading ? "Memproses..." : "Simpan Topup"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
