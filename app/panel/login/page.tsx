@@ -2,8 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function PanelLoginPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -12,18 +16,25 @@ export default function PanelLoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!email || !password) return;
+
     setIsSubmitting(true);
 
     try {
-      // TODO: nanti sambungkan ke Supabase Auth (email + password)
-      // Contoh placeholder dulu:
-      console.log("Panel login clicked", { email, password });
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-      // Sementara: fake delay supaya terasa submit
-      await new Promise((res) => setTimeout(res, 600));
+      if (signInError) {
+        console.error(signInError);
+        setError(signInError.message || "Gagal login. Periksa email & password.");
+        return;
+      }
 
-      // Nanti di sini: redirect ke /panel/dashboard kalau sukses
-      alert("Login Panel diklik. Nanti disambungkan ke Supabase Auth.");
+      // TODO: nanti bisa cek role (ADMIN/CS) di profile.
+      router.push("/panel/dashboard");
     } catch (err) {
       console.error(err);
       setError("Terjadi kesalahan tak terduga.");
