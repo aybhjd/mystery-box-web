@@ -37,7 +37,7 @@ export default function MemberLoginPage() {
         return;
       }
 
-      router.push("/member/home");
+      router.push("/member");
     } catch (err) {
       console.error(err);
       setError("Terjadi kesalahan tak terduga.");
