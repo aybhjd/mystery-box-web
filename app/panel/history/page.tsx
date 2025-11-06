@@ -26,9 +26,10 @@ type HistoryRow = {
   rarity_id: string;
   reward_id: string | null;
 
+  // Supabase relasi -> array
   member: {
     username: string | null;
-  } | null;
+  }[] | null;
 
   rarity: {
     code: string;
@@ -197,7 +198,7 @@ export default function PanelHistoryPage() {
       }
 
       if (searchUsername.trim() !== "") {
-        const u = (row.member?.username || "")
+        const u = (row.member?.[0]?.username || "")
           .toLowerCase()
           .trim();
         if (!u.includes(searchUsername.toLowerCase().trim())) {
@@ -470,7 +471,7 @@ export default function PanelHistoryPage() {
                     className="border-t border-slate-800/80 hover:bg-slate-900/60"
                   >
                     <td className="px-4 py-2 text-[11px]">
-                      {row.member?.username || "-"}
+                      {row.member?.[0]?.username || "-"}
                     </td>
                     <td className="px-2 py-2 text-center">
                       {row.credit_tier}
