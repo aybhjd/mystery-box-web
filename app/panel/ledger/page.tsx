@@ -116,7 +116,7 @@ export default function PanelLedgerPage() {
     loadProfile();
   }, [router]);
 
-  // ---------- load ledger (hanya TOPUP / ADJUST) ----------
+  // ---------- load ledger untuk tenant ----------
 
   useEffect(() => {
     async function loadRows() {
@@ -142,7 +142,6 @@ export default function PanelLedgerPage() {
           `,
           )
           .eq("tenant_id", profile.tenant_id)
-          .in("kind", ["TOPUP", "ADJUST_PLUS", "ADJUST_MINUS"])
           .order("created_at", { ascending: false })
           .limit(200);
 
@@ -194,8 +193,6 @@ export default function PanelLedgerPage() {
             : Promise.resolve({ data: [] as CreatorShort[], error: null }),
         ]);
 
-        // Kalau lookup member/admin error, log saja tapi tetap lanjut;
-        // username / email akan tampil "-" di tabel.
         if (memberErr) {
           console.error("Ledger member lookup error:", memberErr);
         }
@@ -244,20 +241,27 @@ export default function PanelLedgerPage() {
   // ---------- filter di client ----------
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
-      if (kindFilter !== "ALL" && row.kind !== kindFilter) {
-        return false;
-      }
-
-      if (searchUsername.trim() !== "") {
-        const u = (row.member?.username || "").toLowerCase().trim();
-        if (!u.includes(searchUsername.toLowerCase().trim())) {
+    return rows
+      // hanya tampilkan mutasi topup/adjust (BOX_PURCHASE disaring di sini)
+      .filter((row) =>
+        ["TOPUP", "ADJUST_PLUS", "ADJUST_MINUS"].includes(row.kind),
+      )
+      .filter((row) => {
+        if (kindFilter !== "ALL" && row.kind !== kindFilter) {
           return false;
         }
-      }
 
-      return true;
-    });
+        if (searchUsername.trim() !== "") {
+          const u = (row.member?.username || "")
+            .toLowerCase()
+            .trim();
+          if (!u.includes(searchUsername.toLowerCase().trim())) {
+            return false;
+          }
+        }
+
+        return true;
+      });
   }, [rows, kindFilter, searchUsername]);
 
   // ---------- helpers ----------
