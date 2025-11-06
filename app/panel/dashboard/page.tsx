@@ -132,6 +132,14 @@ export default function PanelDashboardPage() {
 
         {!loading && !error && profile && (
           <div className="space-y-3 text-sm text-slate-200">
+            <div className="pt-3">
+              <Link
+                href="/panel/members"
+                className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium hover:bg-slate-800 transition"
+              >
+                Kelola Member
+              </Link>
+            </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">
                 Akun
