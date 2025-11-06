@@ -26,7 +26,7 @@ type HistoryRow = {
   rarity_id: string;
   reward_id: string | null;
 
-  // Supabase relasi -> array
+  // relasi -> array
   member: {
     username: string | null;
   }[] | null;
@@ -34,13 +34,13 @@ type HistoryRow = {
   rarity: {
     code: string;
     name: string;
-  } | null;
+  }[] | null;
 
   reward: {
     label: string;
     reward_type: string;
     amount: number | null;
-  } | null;
+  }[] | null;
 };
 
 export default function PanelHistoryPage() {
@@ -449,19 +449,22 @@ export default function PanelHistoryPage() {
               </tr>
             ) : (
               filteredRows.map((row) => {
-                const rarityText = row.rarity
-                  ? `${row.rarity.name} (${row.rarity.code})`
+                const rarityObj = row.rarity?.[0];
+                const rarityText = rarityObj
+                  ? `${rarityObj.name} (${rarityObj.code})`
                   : "-";
 
                 let rewardText = "-";
-                if (row.reward) {
-                  if (row.reward.reward_type === "CASH") {
-                    const amount = row.reward.amount || 0;
-                    rewardText = `${row.reward.label} - Rp ${amount.toLocaleString(
+                const rewardObj = row.reward?.[0];
+
+                if (rewardObj) {
+                  if (rewardObj.reward_type === "CASH") {
+                    const amount = rewardObj.amount || 0;
+                    rewardText = `${rewardObj.label} - Rp ${amount.toLocaleString(
                       "id-ID",
                     )}`;
                   } else {
-                    rewardText = row.reward.label;
+                    rewardText = rewardObj.label;
                   }
                 }
 
