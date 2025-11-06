@@ -32,6 +32,16 @@ type BannerState = {
   message: string;
 };
 
+type RevealState = {
+  tier: number;
+  rarity: string;
+  reward: string;
+};
+
+type PurchasePopupState = {
+  tier: number;
+};
+
 const BOX_CONFIGS = [
   {
     tier: 1,
@@ -63,12 +73,6 @@ const BOX_CONFIGS = [
   },
 ];
 
-type RevealState = {
-  tier: number;
-  rarity: string;
-  reward: string;
-};
-
 export default function MemberHomePage() {
   const router = useRouter();
 
@@ -82,13 +86,15 @@ export default function MemberHomePage() {
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
-  // state tambahan untuk animasi
+  // animasi
   const [purchaseAnimatingTier, setPurchaseAnimatingTier] =
     useState<number | null>(null);
   const [openingBoxId, setOpeningBoxId] = useState<string | null>(null);
   const [reveal, setReveal] = useState<RevealState | null>(null);
+  const [purchasePopup, setPurchasePopup] =
+    useState<PurchasePopupState | null>(null);
 
-  // ------- helpers format -------
+  // ------- helpers -------
 
   function formatDateTime(dateStr: string | null | undefined) {
     if (!dateStr) return "-";
@@ -123,7 +129,7 @@ export default function MemberHomePage() {
       })()
     : "";
 
-  // ------- fetch data utama -------
+  // ------- fetch data -------
 
   async function fetchAllForMember(uid: string) {
     const nowIso = new Date().toISOString();
@@ -144,7 +150,7 @@ export default function MemberHomePage() {
       setProfile(prof);
     }
 
-    // Inventory (box purchased & belum expired)
+    // Inventory: cuma box PURCHASED & belum expired
     const { data: invData, error: invErr } = await supabase
       .from("box_transactions")
       .select("id, credit_tier, credit_spent, expires_at, status")
@@ -176,7 +182,7 @@ export default function MemberHomePage() {
     setLastOpened(lastData || null);
   }
 
-  // ------- init (cek auth + load data) -------
+  // ------- init -------
 
   useEffect(() => {
     let cancelled = false;
@@ -208,9 +214,7 @@ export default function MemberHomePage() {
       setMemberId(user.id);
       await fetchAllForMember(user.id);
 
-      if (!cancelled) {
-        setLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     }
 
     init();
@@ -251,6 +255,9 @@ export default function MemberHomePage() {
         type: "success",
         message: `Berhasil membeli box ${finalTier} credit. Semoga beruntung!`,
       });
+
+      // munculkan popup purchase
+      setPurchasePopup({ tier: finalTier });
     } catch (e) {
       console.error(e);
       setBanner({
@@ -259,7 +266,6 @@ export default function MemberHomePage() {
       });
     } finally {
       setActionLoading(false);
-      // matikan animasi setelah sebentar
       setTimeout(() => setPurchaseAnimatingTier(null), 700);
     }
   }
@@ -310,7 +316,7 @@ export default function MemberHomePage() {
         }`,
       });
 
-      // tampilkan popup reveal
+      // popup reveal hadiah
       setReveal({
         tier: creditTier,
         rarity,
@@ -350,7 +356,7 @@ export default function MemberHomePage() {
   return (
     <main className="min-h-screen bg-[#02010a] text-slate-50">
       <div className="relative min-h-screen overflow-hidden">
-        {/* Glow / starfield background */}
+        {/* background glow */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.18),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(236,72,153,0.18),_transparent_60%)] opacity-90" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,0.8),rgba(15,23,42,0.95))]" />
 
@@ -393,7 +399,7 @@ export default function MemberHomePage() {
             </div>
           </header>
 
-          {/* Banner error / info */}
+          {/* Banner */}
           {error && (
             <div className="mb-4 rounded-xl border border-rose-500/70 bg-rose-950/40 px-4 py-3 text-sm text-rose-100 shadow-lg shadow-rose-900/40">
               {error}
@@ -411,7 +417,7 @@ export default function MemberHomePage() {
             </div>
           )}
 
-          {/* Section pilih box */}
+          {/* Pilih box */}
           <section className="mb-8">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
@@ -514,6 +520,12 @@ export default function MemberHomePage() {
                             {formatDateTime(box.expires_at)}
                           </span>
                         </p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Rarity:{" "}
+                          <span className="text-slate-100">
+                            ??? (akan ditentukan saat box dibuka)
+                          </span>
+                        </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <p className="text-[11px] text-slate-400">
@@ -573,11 +585,45 @@ export default function MemberHomePage() {
           )}
         </div>
 
-        {/* Popup reveal box */}
-        {reveal && (
+        {/* Popup purchase (saat beli box) */}
+        {purchasePopup && (
           <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="relative w-full max-w-md rounded-3xl border border-fuchsia-400/80 bg-gradient-to-b from-slate-950 via-fuchsia-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(217,70,239,0.7)]">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="h-32 w-32 animate-ping rounded-full bg-fuchsia-400/40" />
+              </div>
+              <div className="relative z-10">
+                <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-fuchsia-400 via-violet-500 to-sky-500 text-4xl shadow-lg shadow-fuchsia-900/70 animate-bounce">
+                  📦
+                </div>
+                <p className="text-xs uppercase tracking-[0.25em] text-fuchsia-300">
+                  Box Dibeli!
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-slate-50">
+                  Box {purchasePopup.tier} credit berhasil dibeli
+                </h3>
+                <p className="mt-2 text-sm text-slate-200">
+                  Box baru sudah masuk ke{" "}
+                  <span className="font-semibold">Inventory</span> kamu.
+                </p>
+                <p className="mt-1 text-[11px] text-slate-300">
+                  Kamu bisa membukanya kapan saja sebelum kadaluarsa.
+                </p>
+                <button
+                  onClick={() => setPurchasePopup(null)}
+                  className="mt-4 rounded-full bg-slate-900/80 px-5 py-2 text-xs font-semibold text-slate-100 border border-slate-600/80 hover:border-fuchsia-400 hover:bg-slate-900 transition"
+                >
+                  Oke, mengerti
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Popup reveal hadiah (saat buka box) */}
+        {reveal && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="relative w-full max-w-md rounded-3xl border border-amber-400/80 bg-gradient-to-b from-slate-950 via-amber-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(245,158,11,0.7)]">
-              {/* glow ping di belakang chest */}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <span className="h-32 w-32 animate-ping rounded-full bg-amber-400/40" />
               </div>
