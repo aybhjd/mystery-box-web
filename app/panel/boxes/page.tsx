@@ -288,19 +288,28 @@ export default function PanelBoxesPage() {
         gimmick_probability: rw.gimmick_probability ?? 0
       }));
 
-      const { error: updErr } = await supabase
-        .from("box_rewards")
-        .upsert(payload, { onConflict: "id" });
+      // Karena semua row sudah ada, kita cukup UPDATE per row.
+      for (const item of payload) {
+        const { error: updErr } = await supabase
+          .from("box_rewards")
+          .update({
+            is_active: item.is_active,
+            real_probability: item.real_probability,
+            gimmick_probability: item.gimmick_probability
+          })
+          .eq("id", item.id);
 
-      if (updErr) {
-        console.error(updErr);
-        alert(updErr.message || "Gagal menyimpan konfigurasi reward.");
-      } else {
-        // optional: kamu bisa tambahin toast sukses
+        if (updErr) {
+          console.error(updErr);
+          throw updErr;
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Terjadi kesalahan tak terduga saat menyimpan.");
+      alert(
+        e?.message ||
+          "Terjadi kesalahan tak terduga saat menyimpan konfigurasi reward."
+      );
     } finally {
       setSavingRarityId(null);
     }
