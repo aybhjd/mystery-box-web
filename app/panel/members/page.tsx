@@ -1,6 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState
+} from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -18,16 +22,6 @@ type MemberRow = {
   created_at: string;
 };
 
-async function getAccessToken() {
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error("No active session");
-  }
-  return session.access_token;
-}
-
 export default function PanelMembersPage() {
   const router = useRouter();
 
@@ -35,31 +29,43 @@ export default function PanelMembersPage() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
     null
   );
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
 
-  // Topup state
+  // Filter username
+  const [filterUsername, setFilterUsername] = useState("");
+
+  // Dropdown akun sendiri
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [selfPwdModalOpen, setSelfPwdModalOpen] = useState(false);
+  const [selfPwdNew, setSelfPwdNew] = useState("");
+  const [selfPwdConfirm, setSelfPwdConfirm] = useState("");
+  const [selfPwdError, setSelfPwdError] = useState<string | null>(null);
+  const [selfPwdLoading, setSelfPwdLoading] = useState(false);
+
+  // Modal Topup
   const [topupMember, setTopupMember] = useState<MemberRow | null>(null);
   const [topupAmount, setTopupAmount] = useState("");
   const [topupNote, setTopupNote] = useState("");
   const [topupError, setTopupError] = useState<string | null>(null);
   const [topupLoading, setTopupLoading] = useState(false);
 
-  // New member state
-  const [newMemberOpen, setNewMemberOpen] = useState(false);
-  const [newUsername, setNewUsername] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newInitialCredit, setNewInitialCredit] = useState("");
-  const [newMemberError, setNewMemberError] = useState<string | null>(null);
-  const [newMemberLoading, setNewMemberLoading] = useState(false);
+  // Modal Adjust (-)
+  const [adjustMember, setAdjustMember] = useState<MemberRow | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustNote, setAdjustNote] = useState("");
+  const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [adjustLoading, setAdjustLoading] = useState(false);
 
-  // Password state
-  const [pwdMember, setPwdMember] = useState<MemberRow | null>(null);
-  const [pwdNew, setPwdNew] = useState("");
-  const [pwdConfirm, setPwdConfirm] = useState("");
-  const [pwdError, setPwdError] = useState<string | null>(null);
-  const [pwdLoading, setPwdLoading] = useState(false);
+  // Modal Password member (UI dulu)
+  const [memberPwdMember, setMemberPwdMember] = useState<MemberRow | null>(
+    null
+  );
+  const [memberPwdNew, setMemberPwdNew] = useState("");
+  const [memberPwdConfirm, setMemberPwdConfirm] = useState("");
+  const [memberPwdError, setMemberPwdError] = useState<string | null>(null);
+  const [memberPwdLoading, setMemberPwdLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -84,7 +90,9 @@ export default function PanelMembersPage() {
         return;
       }
 
-      // 2) Ambil profile current user
+      setCurrentUserEmail(user.email ?? null);
+
+      // 2) Ambil profile current user (untuk tenant & role)
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, tenant_id, role, username")
@@ -118,7 +126,7 @@ export default function PanelMembersPage() {
 
       setCurrentProfile(profile);
 
-      // 3) Ambil semua member di tenant
+      // 3) Ambil semua member di tenant yang sama
       const { data: memberRows, error: membersError } = await supabase
         .from("profiles")
         .select("id, username, credit_balance, created_at")
@@ -152,14 +160,68 @@ export default function PanelMembersPage() {
     }
   }
 
-  const filteredMembers = members.filter((m) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    const uname = (m.username ?? "").toLowerCase();
-    return uname.includes(q);
-  });
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/panel/login");
+  }
 
-  // Topup
+  // --- Self password (akun sendiri) ---
+
+  function openSelfPasswordModal() {
+    setSelfPwdModalOpen(true);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setUserMenuOpen(false);
+  }
+
+  function closeSelfPasswordModal() {
+    setSelfPwdModalOpen(false);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setSelfPwdLoading(false);
+  }
+
+  async function handleSelfPasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSelfPwdError(null);
+
+    if (!selfPwdNew || selfPwdNew.length < 6) {
+      setSelfPwdError("Password minimal 6 karakter.");
+      return;
+    }
+    if (selfPwdNew !== selfPwdConfirm) {
+      setSelfPwdError("Konfirmasi password tidak sama.");
+      return;
+    }
+
+    setSelfPwdLoading(true);
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: selfPwdNew
+      });
+
+      if (updateError) {
+        console.error(updateError);
+        setSelfPwdError(
+          updateError.message || "Gagal mengubah password akun sendiri."
+        );
+        setSelfPwdLoading(false);
+        return;
+      }
+
+      closeSelfPasswordModal();
+    } catch (err) {
+      console.error(err);
+      setSelfPwdError("Terjadi kesalahan tak terduga.");
+      setSelfPwdLoading(false);
+    }
+  }
+
+  // --- Topup ---
+
   function openTopupModal(member: MemberRow) {
     setTopupMember(member);
     setTopupAmount("");
@@ -211,9 +273,12 @@ export default function PanelMembersPage() {
           ? (data[0].new_balance as number)
           : topupMember.credit_balance + amountInt;
 
+      // Update state members
       setMembers((prev) =>
         prev.map((m) =>
-          m.id === topupMember.id ? { ...m, credit_balance: newBalance } : m
+          m.id === topupMember.id
+            ? { ...m, credit_balance: newBalance }
+            : m
         )
       );
 
@@ -225,180 +290,188 @@ export default function PanelMembersPage() {
     }
   }
 
-  // New member
-  function openNewMemberModal() {
-    setNewMemberOpen(true);
-    setNewUsername("");
-    setNewPassword("");
-    setNewInitialCredit("");
-    setNewMemberError(null);
+  // --- Adjust (-) ---
+
+  function openAdjustModal(member: MemberRow) {
+    setAdjustMember(member);
+    setAdjustAmount("");
+    setAdjustNote("");
+    setAdjustError(null);
   }
 
-  function closeNewMemberModal() {
-    setNewMemberOpen(false);
-    setNewUsername("");
-    setNewPassword("");
-    setNewInitialCredit("");
-    setNewMemberError(null);
-    setNewMemberLoading(false);
+  function closeAdjustModal() {
+    setAdjustMember(null);
+    setAdjustAmount("");
+    setAdjustNote("");
+    setAdjustError(null);
+    setAdjustLoading(false);
   }
 
-  async function handleNewMemberSubmit(e: FormEvent) {
+  async function handleAdjustSubmit(e: FormEvent) {
     e.preventDefault();
-    setNewMemberError(null);
+    if (!adjustMember) return;
 
-    const username = newUsername.trim();
-    const password = newPassword;
-    const initialCredit = newInitialCredit.trim()
-      ? parseInt(newInitialCredit, 10)
-      : 0;
+    setAdjustError(null);
 
-    if (!username) {
-      setNewMemberError("Username wajib diisi.");
-      return;
-    }
-    if (!password) {
-      setNewMemberError("Password wajib diisi.");
-      return;
-    }
-    if (Number.isNaN(initialCredit) || initialCredit < 0) {
-      setNewMemberError("Initial credit harus angka 0 atau lebih.");
+    const amountInt = parseInt(adjustAmount, 10);
+    if (!Number.isFinite(amountInt) || amountInt <= 0) {
+      setAdjustError("Jumlah credit yang dikurangi harus > 0.");
       return;
     }
 
-    setNewMemberLoading(true);
+    setAdjustLoading(true);
 
     try {
-      const token = await getAccessToken();
+      const { data, error: rpcError } = await supabase.rpc(
+        "perform_credit_adjust_down",
+        {
+          p_member_id: adjustMember.id,
+          p_amount: amountInt,
+          p_description: adjustNote || null
+        }
+      );
 
-      const res = await fetch("/api/panel/members/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ username, password, initialCredit })
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setNewMemberError(json.error || "Gagal membuat member.");
-        setNewMemberLoading(false);
+      if (rpcError) {
+        console.error(rpcError);
+        setAdjustError(rpcError.message || "Gagal melakukan adjust.");
+        setAdjustLoading(false);
         return;
       }
 
-      const created: MemberRow = json.member;
+      const newBalance =
+        Array.isArray(data) && data.length > 0 && data[0].new_balance != null
+          ? (data[0].new_balance as number)
+          : adjustMember.credit_balance - amountInt;
 
-      setMembers((prev) => [...prev, created]);
-      closeNewMemberModal();
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.id === adjustMember.id
+            ? { ...m, credit_balance: newBalance }
+            : m
+        )
+      );
+
+      closeAdjustModal();
     } catch (err) {
       console.error(err);
-      setNewMemberError("Terjadi kesalahan tak terduga.");
-      setNewMemberLoading(false);
+      setAdjustError("Terjadi kesalahan tak terduga.");
+      setAdjustLoading(false);
     }
   }
 
-  // Password member
-  function openPasswordModal(member: MemberRow) {
-    setPwdMember(member);
-    setPwdNew("");
-    setPwdConfirm("");
-    setPwdError(null);
+  // --- Password member (UI placeholder) ---
+
+  function openMemberPasswordModal(member: MemberRow) {
+    setMemberPwdMember(member);
+    setMemberPwdNew("");
+    setMemberPwdConfirm("");
+    setMemberPwdError(
+      "Fitur ubah password member akan dihubungkan ke API admin Supabase di langkah berikutnya."
+    );
   }
 
-  function closePasswordModal() {
-    setPwdMember(null);
-    setPwdNew("");
-    setPwdConfirm("");
-    setPwdError(null);
-    setPwdLoading(false);
+  function closeMemberPasswordModal() {
+    setMemberPwdMember(null);
+    setMemberPwdNew("");
+    setMemberPwdConfirm("");
+    setMemberPwdError(null);
+    setMemberPwdLoading(false);
   }
 
-  async function handlePasswordSubmit(e: FormEvent) {
+  async function handleMemberPasswordSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!pwdMember) return;
-
-    setPwdError(null);
-
-    if (!pwdNew) {
-      setPwdError("Password baru wajib diisi.");
-      return;
-    }
-    if (pwdNew !== pwdConfirm) {
-      setPwdError("Konfirmasi password tidak sama.");
-      return;
-    }
-
-    setPwdLoading(true);
-
-    try {
-      const token = await getAccessToken();
-
-      const res = await fetch("/api/panel/members/change-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          memberId: pwdMember.id,
-          newPassword: pwdNew
-        })
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setPwdError(json.error || "Gagal mengubah password.");
-        setPwdLoading(false);
-        return;
-      }
-
-      closePasswordModal();
-    } catch (err) {
-      console.error(err);
-      setPwdError("Terjadi kesalahan tak terduga.");
-      setPwdLoading(false);
-    }
+    // Belum diimplementasikan (butuh service role di server)
+    setMemberPwdError(
+      "Belum diimplementasikan. Nanti kita buat route server-side untuk update password member."
+    );
+    setMemberPwdLoading(false);
   }
+
+  const filteredMembers = members.filter((m) => {
+    if (!filterUsername.trim()) return true;
+    const u = (m.username || "").toLowerCase();
+    return u.includes(filterUsername.trim().toLowerCase());
+  });
+
+  const displayName =
+    currentProfile?.username || currentUserEmail || "Akun Panel";
 
   return (
     <main className="min-h-screen flex items-start justify-center px-4 py-10">
       <div className="w-full max-w-5xl space-y-6">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
               Panel
             </p>
             <h1 className="text-2xl font-semibold">Members</h1>
             <p className="text-sm text-slate-400">
-              Daftar member di tenant yang sama. Bisa topup, buat member baru,
-              dan ubah password member.
+              Daftar member di tenant yang sama. Bisa topup dan adjust credit
+              dari Panel.
             </p>
+          </div>
+
+          {/* Dropdown akun (ganti tombol "Kembali ke Dashboard") */}
+          <div className="relative inline-flex">
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-2 text-xs font-medium hover:bg-slate-800 transition"
+            >
+              <span className="mr-2 truncate max-w-[160px]">{displayName}</span>
+              <span className="text-slate-400">▾</span>
+            </button>
+            {userMenuOpen && (
+              <div className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-700 bg-slate-900/95 shadow-lg text-xs overflow-hidden z-20">
+                <button
+                  type="button"
+                  onClick={openSelfPasswordModal}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                >
+                  Ubah password saya
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    void handleLogout();
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-300"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Filter + New Member placeholder */}
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex-1">
+            <label className="text-xs font-medium text-slate-400 block mb-1">
+              Filter username
+            </label>
+            <input
+              type="text"
+              value={filterUsername}
+              onChange={(e) => setFilterUsername(e.target.value)}
+              placeholder="cari username..."
+              className="w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+            />
           </div>
 
           <button
             type="button"
-            onClick={openNewMemberModal}
-            className="rounded-lg border border-emerald-500/70 px-4 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition"
+            onClick={() => {
+              // Untuk sekarang, hanya placeholder
+              alert(
+                "Modal New Member (buat user + profile) akan kita implementasikan setelah kita siapkan API dengan service role."
+              );
+            }}
+            className="self-start inline-flex items-center rounded-lg border border-emerald-500/70 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition"
           >
             New Member
           </button>
-        </div>
-
-        {/* Filter username */}
-        <div className="max-w-sm">
-          <label className="block text-xs font-medium text-slate-300 mb-1">
-            Filter username
-          </label>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="cari username..."
-            className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
-          />
         </div>
 
         {loading && (
@@ -465,15 +538,15 @@ export default function PanelMembersPage() {
                         </button>
                         <button
                           type="button"
-                          className="inline-flex items-center rounded-lg border border-amber-500/60 px-3 py-1.5 text-xs font-medium text-amber-200 opacity-60 cursor-not-allowed"
-                          title="Adjust (-) belum diaktifkan (next step)"
+                          onClick={() => openAdjustModal(m)}
+                          className="inline-flex items-center rounded-lg border border-amber-500/70 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/10 transition"
                         >
                           Adjust (-)
                         </button>
                         <button
                           type="button"
-                          onClick={() => openPasswordModal(m)}
-                          className="inline-flex items-center rounded-lg border border-slate-500/70 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700/60 transition"
+                          onClick={() => openMemberPasswordModal(m)}
+                          className="inline-flex items-center rounded-lg border border-slate-500/70 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700/40 transition"
                         >
                           Password
                         </button>
@@ -486,6 +559,70 @@ export default function PanelMembersPage() {
           </div>
         )}
       </div>
+
+      {/* Modal Self Password */}
+      {selfPwdModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Ubah password akun saya</h2>
+            <form onSubmit={handleSelfPasswordSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="self-pwd-new">
+                  Password baru
+                </label>
+                <input
+                  id="self-pwd-new"
+                  type="password"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  value={selfPwdNew}
+                  onChange={(e) => setSelfPwdNew(e.target.value)}
+                  placeholder="min. 6 karakter"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="self-pwd-confirm"
+                >
+                  Konfirmasi password baru
+                </label>
+                <input
+                  id="self-pwd-confirm"
+                  type="password"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  value={selfPwdConfirm}
+                  onChange={(e) => setSelfPwdConfirm(e.target.value)}
+                />
+              </div>
+
+              {selfPwdError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {selfPwdError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeSelfPasswordModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={selfPwdLoading}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={selfPwdLoading}
+                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {selfPwdLoading ? "Menyimpan..." : "Simpan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal Topup */}
       {topupMember && (
@@ -560,87 +697,72 @@ export default function PanelMembersPage() {
         </div>
       )}
 
-      {/* Modal New Member */}
-      {newMemberOpen && (
+      {/* Modal Adjust */}
+      {adjustMember && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
-            <h2 className="text-lg font-semibold">New Member</h2>
+            <h2 className="text-lg font-semibold">
+              Adjust Credit (–) – {adjustMember.username ?? "Tanpa username"}
+            </h2>
             <p className="text-xs text-slate-400">
-              Email internal akan otomatis dibuat sebagai{" "}
-              <span className="font-mono">username@member.local</span>.
+              Credit saat ini:{" "}
+              <span className="font-mono text-emerald-300">
+                {adjustMember.credit_balance}
+              </span>
             </p>
 
-            <form onSubmit={handleNewMemberSubmit} className="space-y-4">
+            <form onSubmit={handleAdjustSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="nm-username">
-                  Username
+                <label className="text-sm font-medium" htmlFor="adjust-amount">
+                  Jumlah yang dikurangi
                 </label>
                 <input
-                  id="nm-username"
-                  type="text"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="contoh: hero123"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="nm-password">
-                  Password awal
-                </label>
-                <input
-                  id="nm-password"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="nm-initial-credit"
-                >
-                  Initial credit (opsional)
-                </label>
-                <input
-                  id="nm-initial-credit"
+                  id="adjust-amount"
                   type="number"
-                  min={0}
+                  min={1}
                   step={1}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="0"
-                  value={newInitialCredit}
-                  onChange={(e) => setNewInitialCredit(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="contoh: 5"
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
                 />
               </div>
 
-              {newMemberError && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="adjust-note">
+                  Catatan (opsional)
+                </label>
+                <textarea
+                  id="adjust-note"
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                  placeholder="mis. koreksi saldo"
+                  value={adjustNote}
+                  onChange={(e) => setAdjustNote(e.target.value)}
+                />
+              </div>
+
+              {adjustError && (
                 <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
-                  {newMemberError}
+                  {adjustError}
                 </p>
               )}
 
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={closeNewMemberModal}
+                  onClick={closeAdjustModal}
                   className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
-                  disabled={newMemberLoading}
+                  disabled={adjustLoading}
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={
-                    newMemberLoading || !newUsername.trim() || !newPassword
-                  }
-                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                  disabled={adjustLoading || !adjustAmount}
+                  className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
-                  {newMemberLoading ? "Membuat..." : "Simpan Member"}
+                  {adjustLoading ? "Memproses..." : "Simpan Adjust"}
                 </button>
               </div>
             </form>
@@ -648,64 +770,73 @@ export default function PanelMembersPage() {
         </div>
       )}
 
-      {/* Modal Password Member */}
-      {pwdMember && (
+      {/* Modal Password Member (UI placeholder) */}
+      {memberPwdMember && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
             <h2 className="text-lg font-semibold">
-              Ubah Password – {pwdMember.username ?? "Tanpa username"}
+              Ubah password member – {memberPwdMember.username ?? "Tanpa username"}
             </h2>
+            <p className="text-xs text-amber-300">
+              Backend untuk ubah password member belum kita sambungkan.
+              Sementara ini form hanya sebagai preview UI.
+            </p>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <form onSubmit={handleMemberPasswordSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="pwd-new">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="member-pwd-new"
+                >
                   Password baru
                 </label>
                 <input
-                  id="pwd-new"
+                  id="member-pwd-new"
                   type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  value={pwdNew}
-                  onChange={(e) => setPwdNew(e.target.value)}
-                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                  value={memberPwdNew}
+                  onChange={(e) => setMemberPwdNew(e.target.value)}
+                  placeholder="min. 6 karakter"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="pwd-confirm">
-                  Konfirmasi password
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="member-pwd-confirm"
+                >
+                  Konfirmasi password baru
                 </label>
                 <input
-                  id="pwd-confirm"
+                  id="member-pwd-confirm"
                   type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  value={pwdConfirm}
-                  onChange={(e) => setPwdConfirm(e.target.value)}
-                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                  value={memberPwdConfirm}
+                  onChange={(e) => setMemberPwdConfirm(e.target.value)}
                 />
               </div>
 
-              {pwdError && (
-                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
-                  {pwdError}
+              {memberPwdError && (
+                <p className="text-xs text-amber-300 bg-amber-950/30 border border-amber-900/60 rounded-lg px-3 py-2">
+                  {memberPwdError}
                 </p>
               )}
 
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={closePasswordModal}
+                  onClick={closeMemberPasswordModal}
                   className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
-                  disabled={pwdLoading}
+                  disabled={memberPwdLoading}
                 >
-                  Batal
+                  Tutup
                 </button>
                 <button
                   type="submit"
-                  disabled={pwdLoading || !pwdNew || !pwdConfirm}
-                  className="rounded-lg bg-sky-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                  disabled={memberPwdLoading}
+                  className="rounded-lg bg-slate-600 px-4 py-1.5 text-xs font-semibold text-slate-50 hover:bg-slate-500 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
-                  {pwdLoading ? "Menyimpan..." : "Simpan Password"}
+                  Simpan (preview)
                 </button>
               </div>
             </form>
