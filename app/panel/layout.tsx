@@ -8,8 +8,9 @@ import { supabase } from "@/lib/supabaseClient";
 // Sidebar: sekarang cuma Members (kamu sudah hapus Dashboard)
 const navItems = [
   { href: "/panel/members", label: "Members" },
-  { href: "/panel/boxes", label: "Boxes" },
-  { href: "/panel/history", label: "History" }
+  { href: "/panel/ledger", label: "Ledger" },
+  { href: "/panel/history", label: "History" },
+  { href: "/panel/boxes", label: "Boxes" }
 ];
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
