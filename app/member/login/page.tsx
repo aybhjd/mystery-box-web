@@ -2,8 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+
+const MEMBER_EMAIL_DOMAIN = "member.local"; // pastikan sama dengan yang kamu pakai saat buat user di Supabase
 
 export default function MemberLoginPage() {
+  const router = useRouter();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -12,17 +18,26 @@ export default function MemberLoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!username || !password) return;
+
     setIsSubmitting(true);
 
     try {
-      // TODO: nanti sambungkan ke Supabase (auth / mekanisme username)
-      console.log("Member login clicked", { username, password });
+      const email = `${username}@${MEMBER_EMAIL_DOMAIN}`.toLowerCase();
 
-      await new Promise((res) => setTimeout(res, 600));
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-      alert(
-        "Login Member diklik. Nanti kita sambungkan ke Supabase dengan username + password."
-      );
+      if (signInError) {
+        console.error(signInError);
+        setError(signInError.message || "Gagal login. Periksa username & password.");
+        return;
+      }
+
+      router.push("/member/home");
     } catch (err) {
       console.error(err);
       setError("Terjadi kesalahan tak terduga.");
@@ -92,8 +107,7 @@ export default function MemberLoginPage() {
 
         <div className="text-xs text-slate-300/80 text-center space-y-1">
           <p>
-            Credit kamu akan dipakai untuk membeli Mystery Box (1 / 2 / 3
-            credit).
+            Credit kamu akan dipakai untuk membeli Mystery Box (1 / 2 / 3 credit).
           </p>
           <p>
             Salah portal?{" "}
