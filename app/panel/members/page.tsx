@@ -753,6 +753,96 @@ export default function PanelMembersPage() {
         </div>
       )}
 
+      {/* Modal New Member */}
+      {newMemberModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+            <h2 className="text-lg font-semibold">New Member</h2>
+            <p className="text-xs text-slate-400">
+              Email internal akan otomatis dibuat sebagai{" "}
+              <span className="font-mono">username@member.local</span>.
+            </p>
+
+            <form onSubmit={handleNewMemberSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="nm-username">
+                  Username
+                </label>
+                <input
+                  id="nm-username"
+                  type="text"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="contoh: alipcuy"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="nm-password">
+                  Password awal
+                </label>
+                <input
+                  id="nm-password"
+                  type="password"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="nm-initial-credit"
+                >
+                  Initial credit (opsional)
+                </label>
+                <input
+                  id="nm-initial-credit"
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="0"
+                  value={newInitialCredit}
+                  onChange={(e) => setNewInitialCredit(e.target.value)}
+                />
+              </div>
+
+              {newMemberError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {newMemberError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeNewMemberModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={newMemberLoading}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    newMemberLoading ||
+                    !newUsername.trim() ||
+                    !newPassword
+                  }
+                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {newMemberLoading ? "Membuat..." : "Simpan Member"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Topup */}
       {topupMember && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
