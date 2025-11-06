@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mystery Box System",
-  description: "Multi-tenant mystery box giveaway panel & member site"
+  title: "Mystery Box",
+  description: "Mystery Box Gacha"
 };
 
 export default function RootLayout({
