@@ -81,6 +81,7 @@ export default function PanelMembersPage() {
   const [newMemberModalOpen, setNewMemberModalOpen] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newInitialCredit, setNewInitialCredit] = useState("");
   const [newMemberError, setNewMemberError] = useState<string | null>(null);
   const [newMemberLoading, setNewMemberLoading] = useState(false);
@@ -448,6 +449,7 @@ export default function PanelMembersPage() {
     setNewMemberModalOpen(true);
     setNewUsername("");
     setNewPassword("");
+    setNewPasswordConfirm("");
     setNewInitialCredit("");
     setNewMemberError(null);
   }
@@ -456,6 +458,7 @@ export default function PanelMembersPage() {
     setNewMemberModalOpen(false);
     setNewUsername("");
     setNewPassword("");
+    setNewPasswordConfirm("");
     setNewInitialCredit("");
     setNewMemberError(null);
     setNewMemberLoading(false);
@@ -477,6 +480,10 @@ export default function PanelMembersPage() {
     }
     if (!password) {
       setNewMemberError("Password wajib diisi.");
+      return;
+    }
+    if (password !== newPasswordConfirm) {
+      setNewMemberError("Konfirmasi password tidak sama.");
       return;
     }
     if (Number.isNaN(initialCredit) || initialCredit < 0) {
@@ -793,6 +800,20 @@ export default function PanelMembersPage() {
               </div>
 
               <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="nm-password-confirm">
+                  Konfirmasi password
+                </label>
+                <input
+                  id="nm-password-confirm"
+                  type="password"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="ulang password"
+                  value={newPasswordConfirm}
+                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <label
                   className="text-sm font-medium"
                   htmlFor="nm-initial-credit"
@@ -831,7 +852,8 @@ export default function PanelMembersPage() {
                   disabled={
                     newMemberLoading ||
                     !newUsername.trim() ||
-                    !newPassword
+                    !newPassword ||
+                    !newPasswordConfirm
                   }
                   className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
