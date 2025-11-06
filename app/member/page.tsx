@@ -16,6 +16,7 @@ type InventoryBox = {
   credit_tier: number;
   credit_spent: number;
   expires_at: string;
+  rarity: string | null;
 };
 
 type LastOpenedBox = {
@@ -40,6 +41,7 @@ type RevealState = {
 
 type PurchasePopupState = {
   tier: number;
+  rarity?: string | null;
 };
 
 const BOX_CONFIGS = [
@@ -72,6 +74,18 @@ const BOX_CONFIGS = [
     headerGradient: "from-fuchsia-500/80 via-pink-500/80 to-amber-400/80",
   },
 ];
+
+// Helper buat bikin label rarity yang enak dilihat
+function formatRarityName(code: string | null | undefined) {
+  if (!code) return "";
+  const upper = code.toUpperCase();
+  if (upper === "SPECIAL_LEGENDARY") return "Special Legendary";
+  return upper
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 export default function MemberHomePage() {
   const router = useRouter();
@@ -150,10 +164,10 @@ export default function MemberHomePage() {
       setProfile(prof);
     }
 
-    // Inventory: cuma box PURCHASED & belum expired
+    // Inventory: box PURCHASED & belum expired, plus rarity
     const { data: invData, error: invErr } = await supabase
       .from("box_transactions")
-      .select("id, credit_tier, credit_spent, expires_at, status")
+      .select("id, credit_tier, credit_spent, expires_at, status, rarity")
       .eq("member_profile_id", uid)
       .eq("status", "PURCHASED")
       .gt("expires_at", nowIso)
@@ -250,14 +264,21 @@ export default function MemberHomePage() {
 
       const row = Array.isArray(data) ? (data as any[])[0] : (data as any);
       const finalTier = row?.credit_tier ?? tier;
+      const rarityCode: string | null | undefined = row?.rarity ?? null;
+      const rarityName = formatRarityName(rarityCode);
 
       setBanner({
         type: "success",
-        message: `Berhasil membeli box ${finalTier} credit. Semoga beruntung!`,
+        message: rarityName
+          ? `Berhasil membeli box ${finalTier} credit dengan rarity ${rarityName}. Semoga beruntung!`
+          : `Berhasil membeli box ${finalTier} credit. Semoga beruntung!`,
       });
 
-      // munculkan popup purchase
-      setPurchasePopup({ tier: finalTier });
+      // popup purchase + rarity kalau ada
+      setPurchasePopup({
+        tier: finalTier,
+        rarity: rarityCode ?? null,
+      });
     } catch (e) {
       console.error(e);
       setBanner({
@@ -294,7 +315,8 @@ export default function MemberHomePage() {
 
       await fetchAllForMember(memberId);
 
-      const rarity = row?.rarity || "???";
+      const rarityCode: string | null | undefined = row?.rarity ?? null;
+      const rarityName = formatRarityName(rarityCode) || "???";
       const rewardLabel = row?.reward_label || "";
       const rewardNominal =
         typeof row?.reward_nominal === "number"
@@ -311,7 +333,7 @@ export default function MemberHomePage() {
 
       setBanner({
         type: "success",
-        message: `Box ${creditTier} credit terbuka! Rarity: ${rarity}. Hadiah: ${
+        message: `Box ${creditTier} credit terbuka! Rarity: ${rarityName}. Hadiah: ${
           hadiahText || "-"
         }`,
       });
@@ -319,7 +341,7 @@ export default function MemberHomePage() {
       // popup reveal hadiah
       setReveal({
         tier: creditTier,
-        rarity,
+        rarity: rarityName,
         reward: hadiahText || "-",
       });
     } catch (e) {
@@ -505,6 +527,8 @@ export default function MemberHomePage() {
                     ? " border-amber-400/80 animate-pulse scale-[1.01]"
                     : "";
 
+                  const rarityName = formatRarityName(box.rarity);
+
                   return (
                     <div
                       key={box.id}
@@ -521,9 +545,11 @@ export default function MemberHomePage() {
                           </span>
                         </p>
                         <p className="mt-1 text-[11px] text-slate-400">
-                          Rarity:{" "}
+                          Rarity box:{" "}
                           <span className="text-slate-100">
-                            ??? (akan ditentukan saat box dibuka)
+                            {rarityName
+                              ? `${rarityName} (${box.rarity})`
+                              : "Belum diketahui"}
                           </span>
                         </p>
                       </div>
@@ -561,7 +587,9 @@ export default function MemberHomePage() {
                 <p className="mt-2 text-sm font-semibold text-slate-50">
                   Box {lastOpened.credit_tier} credit dengan rarity{" "}
                   <span className="text-amber-300">
-                    {lastOpened.rarity || "-"}
+                    {formatRarityName(lastOpened.rarity) ||
+                      lastOpened.rarity ||
+                      "-"}
                   </span>
                 </p>
                 <p className="mt-2 text-sm text-slate-200">
@@ -585,7 +613,7 @@ export default function MemberHomePage() {
           )}
         </div>
 
-        {/* Popup purchase (saat beli box) */}
+        {/* Popup purchase */}
         {purchasePopup && (
           <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="relative w-full max-w-md rounded-3xl border border-fuchsia-400/80 bg-gradient-to-b from-slate-950 via-fuchsia-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(217,70,239,0.7)]">
@@ -602,6 +630,15 @@ export default function MemberHomePage() {
                 <h3 className="mt-2 text-lg font-semibold text-slate-50">
                   Box {purchasePopup.tier} credit berhasil dibeli
                 </h3>
+                {purchasePopup.rarity && (
+                  <p className="mt-2 text-sm text-slate-200">
+                    Rarity box ini:{" "}
+                    <span className="font-semibold text-fuchsia-200">
+                      {formatRarityName(purchasePopup.rarity)} (
+                      {purchasePopup.rarity})
+                    </span>
+                  </p>
+                )}
                 <p className="mt-2 text-sm text-slate-200">
                   Box baru sudah masuk ke{" "}
                   <span className="font-semibold">Inventory</span> kamu.
@@ -620,7 +657,7 @@ export default function MemberHomePage() {
           </div>
         )}
 
-        {/* Popup reveal hadiah (saat buka box) */}
+        {/* Popup reveal hadiah */}
         {reveal && (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="relative w-full max-w-md rounded-3xl border border-amber-400/80 bg-gradient-to-b from-slate-950 via-amber-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(245,158,11,0.7)]">
