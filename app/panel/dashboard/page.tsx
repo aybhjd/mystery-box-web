@@ -4,13 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+type TenantInfo = {
+  code: string;
+  name: string;
+} | null;
+
 type ProfileRow = {
   role: "ADMIN" | "CS" | "MEMBER";
   username: string | null;
-  tenant: {
-    code: string;
-    name: string;
-  } | null;
+  tenant: TenantInfo;
 };
 
 export default function PanelDashboardPage() {
@@ -61,7 +63,7 @@ export default function PanelDashboardPage() {
         `
         )
         .eq("id", user.id)
-        .maybeSingle(); // kalau null berarti belum ada profile
+        .maybeSingle<any>(); // pakai any biar simple
 
       if (profileError) {
         console.error(profileError);
@@ -76,10 +78,16 @@ export default function PanelDashboardPage() {
         return;
       }
 
+      // Supabase biasa mengembalikan relasi sebagai array -> ambil elemen pertama
+      const rawTenant = (data as any).tenant as any;
+      const tenant: TenantInfo = Array.isArray(rawTenant)
+        ? rawTenant[0] ?? null
+        : rawTenant ?? null;
+
       setProfile({
         role: data.role,
         username: data.username,
-        tenant: data.tenant
+        tenant
       });
 
       setLoading(false);
