@@ -8,7 +8,7 @@ type MemberProfile = {
   id: string;
   tenant_id: string;
   username: string | null;
-  credit: number;
+  credit_balance: number | null;
 };
 
 type InventoryBox = {
@@ -120,7 +120,7 @@ export default function MemberHomePage() {
     // Profil
     const { data: prof, error: profErr } = await supabase
       .from("profiles")
-      .select("id, tenant_id, username, credit")
+      .select("id, tenant_id, username, credit_balance")
       .eq("id", uid)
       .maybeSingle<MemberProfile>();
 
@@ -357,7 +357,7 @@ export default function MemberHomePage() {
                 </p>
                 <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-1 text-[11px] font-medium text-white shadow-md shadow-fuchsia-700/40">
                   <span>✨</span>
-                  <span>{profile?.credit ?? 0} credit</span>
+                  <span>{profile?.credit_balance ?? 0} credit</span>
                 </p>
               </div>
               <button
