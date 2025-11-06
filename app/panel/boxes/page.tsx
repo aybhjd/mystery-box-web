@@ -13,7 +13,13 @@ type CurrentProfile = {
 
 type RarityRow = {
   id: string;
-  code: "COMMON" | "RARE" | "EPIC" | "SUPREME" | "LEGENDARY" | "SPECIAL_LEGENDARY";
+  code:
+    | "COMMON"
+    | "RARE"
+    | "EPIC"
+    | "SUPREME"
+    | "LEGENDARY"
+    | "SPECIAL_LEGENDARY";
   name: string;
   color_key: string;
   sort_order: number;
@@ -26,6 +32,8 @@ type RewardRow = {
   reward_type: string;
   amount: number | null;
   is_active: boolean;
+  real_probability: number | null;
+  gimmick_probability: number | null;
 };
 
 type RarityWithRewards = RarityRow & {
@@ -39,6 +47,7 @@ export default function PanelBoxesPage() {
   const [profile, setProfile] = useState<CurrentProfile | null>(null);
   const [rows, setRows] = useState<RarityWithRewards[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [savingRarityId, setSavingRarityId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -110,11 +119,11 @@ export default function PanelBoxesPage() {
         return;
       }
 
-      // 4) Ambil rewards per tenant
+      // 4) Ambil rewards per tenant (termasuk probabilitas)
       const { data: rewards, error: rewErr } = await supabase
         .from("box_rewards")
         .select(
-          "id, rarity_id, label, reward_type, amount, is_active"
+          "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability"
         )
         .eq("tenant_id", prof.tenant_id)
         .order("rarity_id", { ascending: true });
@@ -127,15 +136,23 @@ export default function PanelBoxesPage() {
       }
 
       const byRarity: Record<string, RewardRow[]> = {};
-      (rewards || []).forEach((r) => {
+      (rewards || []).forEach((raw) => {
+        const r = raw as any as RewardRow;
         if (!byRarity[r.rarity_id]) byRarity[r.rarity_id] = [];
-        byRarity[r.rarity_id].push(r);
+        byRarity[r.rarity_id].push({
+          ...r,
+          real_probability: r.real_probability ?? 0,
+          gimmick_probability: r.gimmick_probability ?? 0
+        });
       });
 
-      const combined: RarityWithRewards[] = (rarities || []).map((rar) => ({
-        ...rar,
-        rewards: byRarity[rar.id] || []
-      }));
+      const combined: RarityWithRewards[] = (rarities || []).map((raw) => {
+        const rar = raw as any as RarityRow;
+        return {
+          ...rar,
+          rewards: byRarity[rar.id] || []
+        };
+      });
 
       setRows(combined);
       setLoading(false);
@@ -143,6 +160,8 @@ export default function PanelBoxesPage() {
 
     load();
   }, [router]);
+
+  const canEdit = profile?.role === "ADMIN";
 
   function formatAmount(amount: number | null, reward_type: string) {
     if (reward_type === "CASH" && amount != null) {
@@ -202,6 +221,91 @@ export default function PanelBoxesPage() {
     }
   }
 
+  function handleRewardChange(
+    rarityId: string,
+    rewardId: string,
+    field: "is_active" | "real_probability" | "gimmick_probability",
+    value: boolean | number
+  ) {
+    setRows((prev) =>
+      prev.map((rar) => {
+        if (rar.id !== rarityId) return rar;
+        return {
+          ...rar,
+          rewards: rar.rewards.map((rw) => {
+            if (rw.id !== rewardId) return rw;
+
+            if (field === "is_active") {
+              return { ...rw, is_active: value as boolean };
+            }
+
+            let num = Number(value);
+            if (!Number.isFinite(num) || num < 0) num = 0;
+            if (num > 100) num = 100;
+
+            if (field === "real_probability") {
+              return { ...rw, real_probability: num };
+            } else {
+              return { ...rw, gimmick_probability: num };
+            }
+          })
+        };
+      })
+    );
+  }
+
+  function getSums(rar: RarityWithRewards) {
+    let real = 0;
+    let gimmick = 0;
+    for (const rw of rar.rewards) {
+      if (!rw.is_active) continue;
+      real += rw.real_probability ?? 0;
+      gimmick += rw.gimmick_probability ?? 0;
+    }
+    return { real, gimmick };
+  }
+
+  async function handleSaveRarity(rarityId: string) {
+    const rar = rows.find((r) => r.id === rarityId);
+    if (!rar) return;
+
+    const { real, gimmick } = getSums(rar);
+
+    if (real !== 100 || gimmick !== 100) {
+      alert(
+        `Total probability untuk rarity ini harus 100%.\n\nReal sekarang: ${real}%, Gimmick sekarang: ${gimmick}%.`
+      );
+      return;
+    }
+
+    setSavingRarityId(rarityId);
+
+    try {
+      const payload = rar.rewards.map((rw) => ({
+        id: rw.id,
+        is_active: rw.is_active,
+        real_probability: rw.real_probability ?? 0,
+        gimmick_probability: rw.gimmick_probability ?? 0
+      }));
+
+      const { error: updErr } = await supabase
+        .from("box_rewards")
+        .upsert(payload, { onConflict: "id" });
+
+      if (updErr) {
+        console.error(updErr);
+        alert(updErr.message || "Gagal menyimpan konfigurasi reward.");
+      } else {
+        // optional: kamu bisa tambahin toast sukses
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Terjadi kesalahan tak terduga saat menyimpan.");
+    } finally {
+      setSavingRarityId(null);
+    }
+  }
+
   return (
     <main className="min-h-screen flex items-start justify-center px-4 py-10">
       <div className="w-full max-w-5xl space-y-6">
@@ -212,10 +316,17 @@ export default function PanelBoxesPage() {
             </p>
             <h1 className="text-2xl font-semibold">Box & Rewards</h1>
             <p className="text-sm text-slate-400">
-              Master data rarity & hadiah per tenant. Nanti di sini kita atur
-              probabilitas real & gimmick (beli box dan buka box).
+              Master data rarity & hadiah per tenant. Di sini Admin bisa
+              mengatur probabilitas <span className="font-semibold">real</span>{" "}
+              &amp; <span className="font-semibold">gimmick</span> untuk setiap
+              hadiah. Total probabilitas (yang aktif) harus tepat 100%.
             </p>
           </div>
+          {!canEdit && (
+            <span className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-300">
+              Mode baca saja (role CS)
+            </span>
+          )}
         </div>
 
         {loading && (
@@ -230,91 +341,201 @@ export default function PanelBoxesPage() {
 
         {!loading && !error && (
           <div className="space-y-4">
-            {rows.map((rar) => (
-              <section
-                key={rar.id}
-                className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 space-y-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    {rarityBadge(rar)}
-                    <span className="text-xs text-slate-400">
-                      Kode: {rar.code}
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    Urutan tampilan: {rar.sort_order}
-                  </span>
-                </div>
+            {rows.map((rar) => {
+              const { real, gimmick } = getSums(rar);
+              const sumOk = real === 100 && gimmick === 100;
 
-                <div className="rounded-xl border border-slate-700/80 bg-slate-950/50 overflow-hidden">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-slate-900/90 border-b border-slate-700/80">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-300">
-                          Hadiah
-                        </th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-300">
-                          Tipe
-                        </th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-300">
-                          Nominal
-                        </th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-300">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rar.rewards.length === 0 ? (
+              return (
+                <section
+                  key={rar.id}
+                  className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 space-y-3"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {rarityBadge(rar)}
+                      <span className="text-xs text-slate-400">
+                        Kode: {rar.code}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-start md:items-end gap-1">
+                      <span className="text-[11px] text-slate-400">
+                        Total Real (aktif):{" "}
+                        <span
+                          className={
+                            real === 100
+                              ? "text-emerald-300 font-semibold"
+                              : "text-red-300 font-semibold"
+                          }
+                        >
+                          {real}%
+                        </span>
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Total Gimmick (aktif):{" "}
+                        <span
+                          className={
+                            gimmick === 100
+                              ? "text-emerald-300 font-semibold"
+                              : "text-red-300 font-semibold"
+                          }
+                        >
+                          {gimmick}%
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-950/50 overflow-hidden">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-slate-900/90 border-b border-slate-700/80">
                         <tr>
-                          <td
-                            colSpan={4}
-                            className="px-3 py-3 text-center text-slate-400"
-                          >
-                            Belum ada reward untuk rarity ini.
-                          </td>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Hadiah
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Tipe
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Nominal
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Real (%)
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Gimmick (%)
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                            Status
+                          </th>
                         </tr>
-                      ) : (
-                        rar.rewards.map((rw) => (
-                          <tr
-                            key={rw.id}
-                            className="border-t border-slate-800/80"
-                          >
-                            <td className="px-3 py-2 align-middle">
-                              {rw.label}
-                            </td>
-                            <td className="px-3 py-2 align-middle text-slate-300">
-                              {rw.reward_type}
-                            </td>
-                            <td className="px-3 py-2 align-middle">
-                              {formatAmount(rw.amount, rw.reward_type)}
-                            </td>
-                            <td className="px-3 py-2 align-middle text-slate-300">
-                              {rw.is_active ? (
-                                <span className="inline-flex items-center rounded-full bg-emerald-900/60 text-emerald-300 px-2 py-0.5">
-                                  Aktif
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center rounded-full bg-slate-800 text-slate-300 px-2 py-0.5">
-                                  Non-aktif
-                                </span>
-                              )}
+                      </thead>
+                      <tbody>
+                        {rar.rewards.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="px-3 py-3 text-center text-slate-400"
+                            >
+                              Belum ada reward untuk rarity ini.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ) : (
+                          rar.rewards.map((rw) => (
+                            <tr
+                              key={rw.id}
+                              className="border-t border-slate-800/80"
+                            >
+                              <td className="px-3 py-2 align-middle">
+                                {rw.label}
+                              </td>
+                              <td className="px-3 py-2 align-middle text-slate-300">
+                                {rw.reward_type}
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                {formatAmount(rw.amount, rw.reward_type)}
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  disabled={!canEdit}
+                                  className="w-20 rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-60"
+                                  value={rw.real_probability ?? 0}
+                                  onChange={(e) =>
+                                    handleRewardChange(
+                                      rar.id,
+                                      rw.id,
+                                      "real_probability",
+                                      Number(e.target.value)
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  disabled={!canEdit}
+                                  className="w-20 rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-60"
+                                  value={rw.gimmick_probability ?? 0}
+                                  onChange={(e) =>
+                                    handleRewardChange(
+                                      rar.id,
+                                      rw.id,
+                                      "gimmick_probability",
+                                      Number(e.target.value)
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <button
+                                  type="button"
+                                  disabled={!canEdit}
+                                  onClick={() =>
+                                    handleRewardChange(
+                                      rar.id,
+                                      rw.id,
+                                      "is_active",
+                                      !rw.is_active
+                                    )
+                                  }
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] border ${
+                                    rw.is_active
+                                      ? "border-emerald-500/70 bg-emerald-900/60 text-emerald-200"
+                                      : "border-slate-600 bg-slate-800 text-slate-300"
+                                  } ${
+                                    !canEdit
+                                      ? "opacity-60 cursor-not-allowed"
+                                      : "cursor-pointer"
+                                  }`}
+                                >
+                                  {rw.is_active ? "Aktif" : "Non-aktif"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-                <p className="text-[11px] text-slate-500">
-                  Catatan: konfigurasi probabilitas (real & gimmick) untuk hadiah
-                  ini akan ditambahkan di tahap berikutnya. Saat ini ini masih
-                  view-only master data.
-                </p>
-              </section>
-            ))}
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-slate-500">
+                      Probabilitas dihitung hanya dari hadiah yang{" "}
+                      <span className="font-semibold text-emerald-300">
+                        Aktif
+                      </span>
+                      . Total <span className="font-semibold">Real</span> dan{" "}
+                      <span className="font-semibold">Gimmick</span> masing-
+                      masing harus tepat{" "}
+                      <span className="font-semibold text-emerald-300">
+                        100%
+                      </span>
+                      .
+                    </p>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveRarity(rar.id)}
+                        disabled={
+                          savingRarityId === rar.id || !rar.rewards.length || !sumOk
+                        }
+                        className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {savingRarityId === rar.id
+                          ? "Menyimpan..."
+                          : sumOk
+                          ? "Simpan konfigurasi"
+                          : "Total belum 100%"}
+                      </button>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
       </div>
