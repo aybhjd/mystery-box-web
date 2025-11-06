@@ -22,6 +22,16 @@ type MemberRow = {
   created_at: string;
 };
 
+async function getAccessToken() {
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error("No active session");
+  }
+  return session.access_token;
+}
+
 export default function PanelMembersPage() {
   const router = useRouter();
 
@@ -58,7 +68,7 @@ export default function PanelMembersPage() {
   const [adjustError, setAdjustError] = useState<string | null>(null);
   const [adjustLoading, setAdjustLoading] = useState(false);
 
-  // Modal Password member (UI dulu)
+  // Modal Password member
   const [memberPwdMember, setMemberPwdMember] = useState<MemberRow | null>(
     null
   );
@@ -66,6 +76,14 @@ export default function PanelMembersPage() {
   const [memberPwdConfirm, setMemberPwdConfirm] = useState("");
   const [memberPwdError, setMemberPwdError] = useState<string | null>(null);
   const [memberPwdLoading, setMemberPwdLoading] = useState(false);
+
+  // Modal New Member
+  const [newMemberModalOpen, setNewMemberModalOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newInitialCredit, setNewInitialCredit] = useState("");
+  const [newMemberError, setNewMemberError] = useState<string | null>(null);
+  const [newMemberLoading, setNewMemberLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -359,15 +377,13 @@ export default function PanelMembersPage() {
     }
   }
 
-  // --- Password member (UI placeholder) ---
+  // --- Password member ---
 
   function openMemberPasswordModal(member: MemberRow) {
     setMemberPwdMember(member);
     setMemberPwdNew("");
     setMemberPwdConfirm("");
-    setMemberPwdError(
-      "Fitur ubah password member akan dihubungkan ke API admin Supabase di langkah berikutnya."
-    );
+    setMemberPwdError(null);
   }
 
   function closeMemberPasswordModal() {
@@ -380,11 +396,124 @@ export default function PanelMembersPage() {
 
   async function handleMemberPasswordSubmit(e: FormEvent) {
     e.preventDefault();
-    // Belum diimplementasikan (butuh service role di server)
-    setMemberPwdError(
-      "Belum diimplementasikan. Nanti kita buat route server-side untuk update password member."
-    );
-    setMemberPwdLoading(false);
+    if (!memberPwdMember) return;
+
+    setMemberPwdError(null);
+
+    if (!memberPwdNew || memberPwdNew.length < 6) {
+      setMemberPwdError("Password minimal 6 karakter.");
+      return;
+    }
+    if (memberPwdNew !== memberPwdConfirm) {
+      setMemberPwdError("Konfirmasi password tidak sama.");
+      return;
+    }
+
+    setMemberPwdLoading(true);
+
+    try {
+      const token = await getAccessToken();
+
+      const res = await fetch("/api/panel/members/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          memberId: memberPwdMember.id,
+          newPassword: memberPwdNew
+        })
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setMemberPwdError(json.error || "Gagal mengubah password member.");
+        setMemberPwdLoading(false);
+        return;
+      }
+
+      closeMemberPasswordModal();
+    } catch (err) {
+      console.error(err);
+      setMemberPwdError("Terjadi kesalahan tak terduga.");
+      setMemberPwdLoading(false);
+    }
+  }
+
+  // --- New Member ---
+
+  function openNewMemberModal() {
+    setNewMemberModalOpen(true);
+    setNewUsername("");
+    setNewPassword("");
+    setNewInitialCredit("");
+    setNewMemberError(null);
+  }
+
+  function closeNewMemberModal() {
+    setNewMemberModalOpen(false);
+    setNewUsername("");
+    setNewPassword("");
+    setNewInitialCredit("");
+    setNewMemberError(null);
+    setNewMemberLoading(false);
+  }
+
+  async function handleNewMemberSubmit(e: FormEvent) {
+    e.preventDefault();
+    setNewMemberError(null);
+
+    const username = newUsername.trim();
+    const password = newPassword;
+    const initialCredit = newInitialCredit.trim()
+      ? parseInt(newInitialCredit, 10)
+      : 0;
+
+    if (!username) {
+      setNewMemberError("Username wajib diisi.");
+      return;
+    }
+    if (!password) {
+      setNewMemberError("Password wajib diisi.");
+      return;
+    }
+    if (Number.isNaN(initialCredit) || initialCredit < 0) {
+      setNewMemberError("Initial credit harus angka 0 atau lebih.");
+      return;
+    }
+
+    setNewMemberLoading(true);
+
+    try {
+      const token = await getAccessToken();
+
+      const res = await fetch("/api/panel/members/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ username, password, initialCredit })
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setNewMemberError(json.error || "Gagal membuat member.");
+        setNewMemberLoading(false);
+        return;
+      }
+
+      const created: MemberRow = json.member;
+      setMembers((prev) => [...prev, created]);
+      closeNewMemberModal();
+    } catch (err) {
+      console.error(err);
+      setNewMemberError("Terjadi kesalahan tak terduga.");
+      setNewMemberLoading(false);
+    }
   }
 
   const filteredMembers = members.filter((m) => {
@@ -411,7 +540,7 @@ export default function PanelMembersPage() {
             </p>
           </div>
 
-          {/* Dropdown akun (ganti tombol "Kembali ke Dashboard") */}
+          {/* Dropdown akun */}
           <div className="relative inline-flex">
             <button
               type="button"
@@ -445,7 +574,7 @@ export default function PanelMembersPage() {
           </div>
         </div>
 
-        {/* Filter + New Member placeholder */}
+        {/* Filter + New Member */}
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div className="flex-1">
             <label className="text-xs font-medium text-slate-400 block mb-1">
@@ -462,12 +591,7 @@ export default function PanelMembersPage() {
 
           <button
             type="button"
-            onClick={() => {
-              // Untuk sekarang, hanya placeholder
-              alert(
-                "Modal New Member (buat user + profile) akan kita implementasikan setelah kita siapkan API dengan service role."
-              );
-            }}
+            onClick={openNewMemberModal}
             className="self-start inline-flex items-center rounded-lg border border-emerald-500/70 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition"
           >
             New Member
@@ -770,17 +894,14 @@ export default function PanelMembersPage() {
         </div>
       )}
 
-      {/* Modal Password Member (UI placeholder) */}
+      {/* Modal Password Member */}
       {memberPwdMember && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
             <h2 className="text-lg font-semibold">
-              Ubah password member – {memberPwdMember.username ?? "Tanpa username"}
+              Ubah password member –{" "}
+              {memberPwdMember.username ?? "Tanpa username"}
             </h2>
-            <p className="text-xs text-amber-300">
-              Backend untuk ubah password member belum kita sambungkan.
-              Sementara ini form hanya sebagai preview UI.
-            </p>
 
             <form onSubmit={handleMemberPasswordSubmit} className="space-y-4">
               <div className="space-y-1.5">
@@ -817,7 +938,7 @@ export default function PanelMembersPage() {
               </div>
 
               {memberPwdError && (
-                <p className="text-xs text-amber-300 bg-amber-950/30 border border-amber-900/60 rounded-lg px-3 py-2">
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/60 rounded-lg px-3 py-2">
                   {memberPwdError}
                 </p>
               )}
@@ -829,14 +950,14 @@ export default function PanelMembersPage() {
                   className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
                   disabled={memberPwdLoading}
                 >
-                  Tutup
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={memberPwdLoading}
                   className="rounded-lg bg-slate-600 px-4 py-1.5 text-xs font-semibold text-slate-50 hover:bg-slate-500 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
-                  Simpan (preview)
+                  {memberPwdLoading ? "Menyimpan..." : "Simpan password"}
                 </button>
               </div>
             </form>
