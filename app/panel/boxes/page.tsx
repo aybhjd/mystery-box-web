@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -71,23 +71,6 @@ export default function PanelBoxesPage() {
     3: []
   });
   const [savingTier, setSavingTier] = useState<number | null>(null);
-
-  // Modal Tambah/Edit Hadiah per rarity
-  const [rewardModalOpen, setRewardModalOpen] = useState(false);
-  const [rewardModalMode, setRewardModalMode] = useState<"create" | "edit">(
-    "create"
-  );
-  const [rewardModalRarity, setRewardModalRarity] = useState<RarityRow | null>(
-    null
-  );
-  const [editingReward, setEditingReward] = useState<RewardRow | null>(null);
-
-  const [rewardLabel, setRewardLabel] = useState("");
-  const [rewardType, setRewardType] = useState<"CASH" | "ITEM">("CASH");
-  const [rewardAmount, setRewardAmount] = useState<string>("");
-  const [rewardIsActive, setRewardIsActive] = useState(true);
-  const [rewardSaving, setRewardSaving] = useState(false);
-  const [rewardError, setRewardError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -311,165 +294,6 @@ export default function PanelBoxesPage() {
             {r.name}
           </span>
         );
-    }
-  }
-
-  // ----- Modal Tambah/Edit Hadiah -----
-
-  const canEdit = profile?.role === "ADMIN";
-
-  function openCreateRewardModal(rarity: RarityRow) {
-    if (!canEdit) return;
-    setRewardModalMode("create");
-    setRewardModalRarity(rarity);
-    setEditingReward(null);
-    setRewardLabel("");
-    setRewardType("CASH");
-    setRewardAmount("");
-    setRewardIsActive(true);
-    setRewardError(null);
-    setRewardModalOpen(true);
-  }
-
-  function openEditRewardModal(rarity: RarityRow, reward: RewardRow) {
-    if (!canEdit) return;
-    setRewardModalMode("edit");
-    setRewardModalRarity(rarity);
-    setEditingReward(reward);
-    setRewardLabel(reward.label);
-    setRewardType(
-      (reward.reward_type as "CASH" | "ITEM") ?? "CASH"
-    );
-    setRewardAmount(
-      reward.amount != null ? String(reward.amount) : ""
-    );
-    setRewardIsActive(!!reward.is_active);
-    setRewardError(null);
-    setRewardModalOpen(true);
-  }
-
-  function closeRewardModal() {
-    setRewardModalOpen(false);
-    setRewardModalRarity(null);
-    setEditingReward(null);
-    setRewardLabel("");
-    setRewardAmount("");
-    setRewardIsActive(true);
-    setRewardSaving(false);
-    setRewardError(null);
-  }
-
-  async function handleRewardModalSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!profile?.tenant_id || !rewardModalRarity) return;
-
-    const label = rewardLabel.trim();
-    if (!label) {
-      setRewardError("Nama hadiah wajib diisi.");
-      return;
-    }
-
-    let amountNumber: number | null = null;
-
-    if (rewardType === "CASH") {
-      if (!rewardAmount.trim()) {
-        setRewardError("Nominal wajib diisi untuk hadiah saldo.");
-        return;
-      }
-      amountNumber = Number(rewardAmount);
-      if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
-        setRewardError("Nominal harus angka lebih dari 0.");
-        return;
-      }
-    }
-
-    setRewardSaving(true);
-    setRewardError(null);
-
-    try {
-      if (rewardModalMode === "create") {
-        // INSERT hadiah baru
-        const { data, error } = await supabase
-          .from("box_rewards")
-          .insert({
-            tenant_id: profile.tenant_id,
-            rarity_id: rewardModalRarity.id,
-            label,
-            reward_type: rewardType,
-            amount: amountNumber,
-            is_active: rewardIsActive,
-            real_probability: 0,
-            gimmick_probability: 0
-          })
-          .select(
-            "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability"
-          )
-          .single<RewardRow>();
-
-        if (error) throw error;
-
-        const newReward: RewardRow = {
-          ...data,
-          real_probability: data.real_probability ?? 0,
-          gimmick_probability: data.gimmick_probability ?? 0
-        };
-
-        // Tambah ke state rarity yang sesuai
-        setRows((prev) =>
-          prev.map((r) =>
-            r.id === rewardModalRarity.id
-              ? { ...r, rewards: [...r.rewards, newReward] }
-              : r
-          )
-        );
-      } else if (rewardModalMode === "edit" && editingReward) {
-        // UPDATE hadiah existing
-        const { data, error } = await supabase
-          .from("box_rewards")
-          .update({
-            label,
-            reward_type: rewardType,
-            amount: amountNumber,
-            is_active: rewardIsActive
-          })
-          .eq("id", editingReward.id)
-          .select(
-            "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability"
-          )
-          .maybeSingle<RewardRow>();
-
-        if (error) throw error;
-
-        if (data) {
-          const updated: RewardRow = {
-            ...data,
-            real_probability: data.real_probability ?? 0,
-            gimmick_probability: data.gimmick_probability ?? 0
-          };
-
-          setRows((prev) =>
-            prev.map((r) =>
-              r.id === updated.rarity_id
-                ? {
-                    ...r,
-                    rewards: r.rewards.map((rw) =>
-                      rw.id === updated.id ? { ...rw, ...updated } : rw
-                    )
-                  }
-                : r
-            )
-          );
-        }
-      }
-
-      closeRewardModal();
-    } catch (err: any) {
-      console.error(err);
-      setRewardError(
-        err?.message || "Gagal menyimpan hadiah. Coba lagi nanti."
-      );
-    } finally {
-      setRewardSaving(false);
     }
   }
 
@@ -779,18 +603,13 @@ export default function PanelBoxesPage() {
                             <th className="px-3 py-2 text-left font-semibold text-slate-300">
                               Status
                             </th>
-                            {canEdit && (
-                              <th className="px-3 py-2 text-left font-semibold text-slate-300">
-                                Aksi
-                              </th>
-                            )}
                           </tr>
                         </thead>
                         <tbody>
                           {rar.rewards.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={canEdit ? 7 : 6}
+                                colSpan={6}
                                 className="px-3 py-3 text-center text-slate-400"
                               >
                                 Belum ada reward untuk rarity ini.
@@ -872,17 +691,6 @@ export default function PanelBoxesPage() {
                                     {rw.is_active ? "Aktif" : "Non-aktif"}
                                   </button>
                                 </td>
-                                {canEdit && (
-                                  <td className="px-3 py-2 align-middle">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditRewardModal(rar, rw)}
-                                      className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:bg-slate-800 transition"
-                                    >
-                                      Edit
-                                    </button>
-                                  </td>
-                                )}
                               </tr>
                             ))
                           )}
@@ -893,39 +701,34 @@ export default function PanelBoxesPage() {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[11px] text-slate-500">
                         Probabilitas dihitung hanya dari hadiah yang{" "}
-                        <span className="font-semibold text-emerald-300">Aktif</span>.
-                        Total <span className="font-semibold">Real</span> dan{" "}
-                        <span className="font-semibold">Gimmick</span> masing-masing
-                        harus tepat <span className="font-semibold text-emerald-300">
+                        <span className="font-semibold text-emerald-300">
+                          Aktif
+                        </span>
+                        . Total <span className="font-semibold">Real</span> dan{" "}
+                        <span className="font-semibold">Gimmick</span>{" "}
+                        masing-masing harus tepat{" "}
+                        <span className="font-semibold text-emerald-300">
                           100%
-                        </span>.
+                        </span>
+                        .
                       </p>
                       {canEdit && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openCreateRewardModal(rar)}
-                            className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 transition"
-                          >
-                            Tambah Hadiah
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveRarity(rar.id)}
-                            disabled={
-                              savingRarityId === rar.id ||
-                              !rar.rewards.length ||
-                              !sumOk
-                            }
-                            className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                          >
-                            {savingRarityId === rar.id
-                              ? "Menyimpan..."
-                              : sumOk
-                              ? "Simpan konfigurasi"
-                              : "Total belum 100%"}
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRarity(rar.id)}
+                          disabled={
+                            savingRarityId === rar.id ||
+                            !rar.rewards.length ||
+                            !sumOk
+                          }
+                          className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          {savingRarityId === rar.id
+                            ? "Menyimpan..."
+                            : sumOk
+                            ? "Simpan konfigurasi"
+                            : "Total belum 100%"}
+                        </button>
                       )}
                     </div>
                   </section>
@@ -1137,118 +940,6 @@ export default function PanelBoxesPage() {
           </>
         )}
       </div>
-      {rewardModalOpen && rewardModalRarity && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
-            <h2 className="text-lg font-semibold">
-              {rewardModalMode === "create"
-                ? `Tambah Hadiah (${rewardModalRarity.name})`
-                : `Edit Hadiah (${rewardModalRarity.name})`}
-            </h2>
-
-            <form onSubmit={handleRewardModalSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="rw-label">
-                  Nama hadiah
-                </label>
-                <input
-                  id="rw-label"
-                  type="text"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="contoh: Saldo 5k / HP Android"
-                  value={rewardLabel}
-                  onChange={(e) => setRewardLabel(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor="rw-type">
-                    Tipe
-                  </label>
-                  <select
-                    id="rw-type"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                    value={rewardType}
-                    onChange={(e) =>
-                      setRewardType(
-                        e.target.value === "ITEM" ? "ITEM" : "CASH"
-                      )
-                    }
-                  >
-                    <option value="CASH">CASH (saldo)</option>
-                    <option value="ITEM">ITEM (barang)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    className="text-sm font-medium"
-                    htmlFor="rw-amount"
-                  >
-                    Nominal (untuk CASH)
-                  </label>
-                  <input
-                    id="rw-amount"
-                    type="number"
-                    min={0}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                    placeholder="5000"
-                    value={rewardAmount}
-                    onChange={(e) => setRewardAmount(e.target.value)}
-                    disabled={rewardType !== "CASH"}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRewardIsActive((v) => !v)}
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs border ${
-                    rewardIsActive
-                      ? "border-emerald-500/70 bg-emerald-900/60 text-emerald-200"
-                      : "border-slate-600 bg-slate-800 text-slate-300"
-                  }`}
-                >
-                  {rewardIsActive ? "Aktif" : "Non-aktif"}
-                </button>
-                <span className="text-[11px] text-slate-400">
-                  Status awal hadiah (bisa diubah lagi dari tabel).
-                </span>
-              </div>
-
-              {rewardError && (
-                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
-                  {rewardError}
-                </p>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={closeRewardModal}
-                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
-                  disabled={rewardSaving}
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={rewardSaving || !rewardLabel.trim()}
-                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                >
-                  {rewardSaving
-                    ? "Menyimpan..."
-                    : rewardModalMode === "create"
-                    ? "Tambah Hadiah"
-                    : "Simpan Perubahan"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
