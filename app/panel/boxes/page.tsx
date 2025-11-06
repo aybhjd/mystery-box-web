@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -33,7 +33,7 @@ type RewardRow = {
   id: string;
   rarity_id: string;
   label: string;
-  reward_type: string;
+  reward_type: string; // "CASH" | "ITEM"
   amount: number | null;
   is_active: boolean;
   real_probability: number | null;
@@ -68,9 +68,26 @@ export default function PanelBoxesPage() {
   >({
     1: [],
     2: [],
-    3: []
+    3: [],
   });
   const [savingTier, setSavingTier] = useState<number | null>(null);
+
+  // Modal Tambah/Edit Hadiah per rarity
+  const [rewardModalOpen, setRewardModalOpen] = useState(false);
+  const [rewardModalMode, setRewardModalMode] = useState<"create" | "edit">(
+    "create",
+  );
+  const [rewardModalRarity, setRewardModalRarity] = useState<RarityRow | null>(
+    null,
+  );
+  const [editingReward, setEditingReward] = useState<RewardRow | null>(null);
+
+  const [rewardLabel, setRewardLabel] = useState("");
+  const [rewardType, setRewardType] = useState<"CASH" | "ITEM">("CASH");
+  const [rewardAmount, setRewardAmount] = useState<string>("");
+  const [rewardIsActive, setRewardIsActive] = useState(true);
+  const [rewardSaving, setRewardSaving] = useState(false);
+  const [rewardError, setRewardError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -80,7 +97,7 @@ export default function PanelBoxesPage() {
       // 1) Cek user
       const {
         data: { user },
-        error: userError
+        error: userError,
       } = await supabase.auth.getUser();
 
       if (userError) {
@@ -148,7 +165,7 @@ export default function PanelBoxesPage() {
       const { data: rewardsData, error: rewErr } = await supabase
         .from("box_rewards")
         .select(
-          "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability"
+          "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability",
         )
         .eq("tenant_id", prof.tenant_id)
         .order("rarity_id", { ascending: true });
@@ -169,13 +186,13 @@ export default function PanelBoxesPage() {
         byRarity[rid].push({
           ...rw,
           real_probability: rw.real_probability ?? 0,
-          gimmick_probability: rw.gimmick_probability ?? 0
+          gimmick_probability: rw.gimmick_probability ?? 0,
         });
       });
 
       const combined: RarityWithRewards[] = rarities.map((rar) => ({
         ...rar,
-        rewards: byRarity[rar.id] || []
+        rewards: byRarity[rar.id] || [],
       }));
       setRows(combined);
 
@@ -183,7 +200,7 @@ export default function PanelBoxesPage() {
       const { data: creditData, error: creditErr } = await supabase
         .from("box_credit_rarity_probs")
         .select(
-          "id, credit_tier, rarity_id, is_active, real_probability, gimmick_probability"
+          "id, credit_tier, rarity_id, is_active, real_probability, gimmick_probability",
         )
         .eq("tenant_id", prof.tenant_id);
 
@@ -200,7 +217,7 @@ export default function PanelBoxesPage() {
       const creditByTier: Record<number, CreditProbRow[]> = {
         1: [],
         2: [],
-        3: []
+        3: [],
       };
 
       (creditData || []).forEach((raw: any) => {
@@ -214,7 +231,7 @@ export default function PanelBoxesPage() {
           is_active: raw.is_active,
           real_probability: raw.real_probability ?? 0,
           gimmick_probability: raw.gimmick_probability ?? 0,
-          rarity
+          rarity,
         };
 
         if (!creditByTier[row.credit_tier]) {
@@ -225,7 +242,7 @@ export default function PanelBoxesPage() {
 
       [1, 2, 3].forEach((tier) => {
         creditByTier[tier]?.sort(
-          (a, b) => a.rarity.sort_order - b.rarity.sort_order
+          (a, b) => a.rarity.sort_order - b.rarity.sort_order,
         );
       });
 
@@ -244,7 +261,7 @@ export default function PanelBoxesPage() {
       return new Intl.NumberFormat("id-ID", {
         style: "currency",
         currency: "IDR",
-        minimumFractionDigits: 0
+        minimumFractionDigits: 0,
       }).format(amount);
     }
     return "-";
@@ -297,13 +314,168 @@ export default function PanelBoxesPage() {
     }
   }
 
+  // ----- Modal Tambah/Edit Hadiah -----
+
+  function openCreateRewardModal(rarity: RarityRow) {
+    if (!canEdit) return;
+    setRewardModalMode("create");
+    setRewardModalRarity(rarity);
+    setEditingReward(null);
+    setRewardLabel("");
+    setRewardType("CASH");
+    setRewardAmount("");
+    setRewardIsActive(true);
+    setRewardError(null);
+    setRewardModalOpen(true);
+  }
+
+  function openEditRewardModal(rarity: RarityRow, reward: RewardRow) {
+    if (!canEdit) return;
+    setRewardModalMode("edit");
+    setRewardModalRarity(rarity);
+    setEditingReward(reward);
+    setRewardLabel(reward.label);
+    setRewardType((reward.reward_type as "CASH" | "ITEM") ?? "CASH");
+    setRewardAmount(
+      reward.amount != null ? String(reward.amount) : "",
+    );
+    setRewardIsActive(!!reward.is_active);
+    setRewardError(null);
+    setRewardModalOpen(true);
+  }
+
+  function closeRewardModal() {
+    setRewardModalOpen(false);
+    setRewardModalRarity(null);
+    setEditingReward(null);
+    setRewardLabel("");
+    setRewardAmount("");
+    setRewardIsActive(true);
+    setRewardSaving(false);
+    setRewardError(null);
+  }
+
+  async function handleRewardModalSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!profile?.tenant_id || !rewardModalRarity) return;
+
+    const tenantId = profile.tenant_id;
+    const label = rewardLabel.trim();
+    if (!label) {
+      setRewardError("Nama hadiah wajib diisi.");
+      return;
+    }
+
+    let amountNumber: number | null = null;
+
+    if (rewardType === "CASH") {
+      if (!rewardAmount.trim()) {
+        setRewardError("Nominal wajib diisi untuk hadiah saldo.");
+        return;
+      }
+      amountNumber = Number(rewardAmount);
+      if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+        setRewardError("Nominal harus angka lebih dari 0.");
+        return;
+      }
+    }
+
+    setRewardSaving(true);
+    setRewardError(null);
+
+    try {
+      if (rewardModalMode === "create") {
+        // INSERT hadiah baru
+        const { data, error } = await supabase
+          .from("box_rewards")
+          .insert({
+            tenant_id: tenantId,
+            rarity_id: rewardModalRarity.id,
+            label,
+            reward_type: rewardType,
+            amount: amountNumber,
+            is_active: rewardIsActive,
+            real_probability: 0,
+            gimmick_probability: 0,
+          })
+          .select(
+            "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability",
+          )
+          .single<RewardRow>();
+
+        if (error) throw error;
+
+        const newReward: RewardRow = {
+          ...data,
+          real_probability: data.real_probability ?? 0,
+          gimmick_probability: data.gimmick_probability ?? 0,
+        };
+
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === rewardModalRarity.id
+              ? { ...r, rewards: [...r.rewards, newReward] }
+              : r,
+          ),
+        );
+      } else if (rewardModalMode === "edit" && editingReward) {
+        // UPDATE hadiah existing
+        const { data, error } = await supabase
+          .from("box_rewards")
+          .update({
+            label,
+            reward_type: rewardType,
+            amount: amountNumber,
+            is_active: rewardIsActive,
+          })
+          .eq("id", editingReward.id)
+          .select(
+            "id, rarity_id, label, reward_type, amount, is_active, real_probability, gimmick_probability",
+          )
+          .maybeSingle<RewardRow>();
+
+        if (error) throw error;
+
+        if (data) {
+          const updated: RewardRow = {
+            ...data,
+            real_probability: data.real_probability ?? 0,
+            gimmick_probability: data.gimmick_probability ?? 0,
+          };
+
+          setRows((prev) =>
+            prev.map((r) =>
+              r.id === updated.rarity_id
+                ? {
+                    ...r,
+                    rewards: r.rewards.map((rw) =>
+                      rw.id === updated.id ? { ...rw, ...updated } : rw,
+                    ),
+                  }
+                : r,
+            ),
+          );
+        }
+      }
+
+      closeRewardModal();
+    } catch (err: any) {
+      console.error(err);
+      setRewardError(
+        err?.message || "Gagal menyimpan hadiah. Coba lagi nanti.",
+      );
+    } finally {
+      setRewardSaving(false);
+    }
+  }
+
   // --- Reward per rarity (RNG 2, buka box) ---
 
   function handleRewardChange(
     rarityId: string,
     rewardId: string,
     field: "is_active" | "real_probability" | "gimmick_probability",
-    value: boolean | number
+    value: boolean | number,
   ) {
     setRows((prev) =>
       prev.map((rar) => {
@@ -326,9 +498,9 @@ export default function PanelBoxesPage() {
             } else {
               return { ...rw, gimmick_probability: num };
             }
-          })
+          }),
         };
-      })
+      }),
     );
   }
 
@@ -350,7 +522,7 @@ export default function PanelBoxesPage() {
     const { real, gimmick } = getSums(rar);
     if (real !== 100 || gimmick !== 100) {
       alert(
-        `Total probability untuk rarity ini harus 100%.\n\nReal sekarang: ${real}%, Gimmick sekarang: ${gimmick}%.`
+        `Total probability untuk rarity ini harus 100%.\n\nReal sekarang: ${real}%, Gimmick sekarang: ${gimmick}%.`,
       );
       return;
     }
@@ -362,7 +534,7 @@ export default function PanelBoxesPage() {
         id: rw.id,
         is_active: rw.is_active,
         real_probability: rw.real_probability ?? 0,
-        gimmick_probability: rw.gimmick_probability ?? 0
+        gimmick_probability: rw.gimmick_probability ?? 0,
       }));
 
       // Semua row sudah ada, cukup UPDATE per id.
@@ -372,7 +544,7 @@ export default function PanelBoxesPage() {
           .update({
             is_active: item.is_active,
             real_probability: item.real_probability,
-            gimmick_probability: item.gimmick_probability
+            gimmick_probability: item.gimmick_probability,
           })
           .eq("id", item.id);
 
@@ -385,7 +557,7 @@ export default function PanelBoxesPage() {
       console.error(e);
       alert(
         e?.message ||
-          "Terjadi kesalahan tak terduga saat menyimpan konfigurasi reward."
+          "Terjadi kesalahan tak terduga saat menyimpan konfigurasi reward.",
       );
     } finally {
       setSavingRarityId(null);
@@ -404,7 +576,7 @@ export default function PanelBoxesPage() {
       // 3 credit: mulai dari Epic (Common & Rare digugurkan)
       return list.filter(
         (row) =>
-          row.rarity.code !== "COMMON" && row.rarity.code !== "RARE"
+          row.rarity.code !== "COMMON" && row.rarity.code !== "RARE",
       );
     }
     return list;
@@ -414,13 +586,13 @@ export default function PanelBoxesPage() {
     tier: number,
     id: string,
     field: "is_active" | "real_probability" | "gimmick_probability",
-    value: boolean | number
+    value: boolean | number,
   ) {
     setCreditConfigs((prev) => {
       const copy: Record<number, CreditProbRow[]> = {
         1: prev[1] || [],
         2: prev[2] || [],
-        3: prev[3] || []
+        3: prev[3] || [],
       };
 
       copy[tier] = (copy[tier] || []).map((row) => {
@@ -463,7 +635,7 @@ export default function PanelBoxesPage() {
 
     if (real !== 100 || gimmick !== 100) {
       alert(
-        `Total probability untuk box ${tier} credit harus 100%.\n\nReal sekarang: ${real}%, Gimmick sekarang: ${gimmick}%.`
+        `Total probability untuk box ${tier} credit harus 100%.\n\nReal sekarang: ${real}%, Gimmick sekarang: ${gimmick}%.`,
       );
       return;
     }
@@ -477,7 +649,7 @@ export default function PanelBoxesPage() {
           .update({
             is_active: row.is_active,
             real_probability: row.real_probability,
-            gimmick_probability: row.gimmick_probability
+            gimmick_probability: row.gimmick_probability,
           })
           .eq("id", row.id);
 
@@ -490,7 +662,7 @@ export default function PanelBoxesPage() {
       console.error(e);
       alert(
         e?.message ||
-          "Terjadi kesalahan tak terduga saat menyimpan konfigurasi tier."
+          "Terjadi kesalahan tak terduga saat menyimpan konfigurasi tier.",
       );
     } finally {
       setSavingTier(null);
@@ -509,11 +681,11 @@ export default function PanelBoxesPage() {
             </p>
             <h1 className="text-2xl font-semibold">Box & Rewards</h1>
             <p className="text-sm text-slate-400">
-              Master data rarity & hadiah per tenant. Di sini Admin bisa mengatur
-              probabilitas <span className="font-semibold">real</span> &amp;{" "}
-              <span className="font-semibold">gimmick</span> baik untuk hadiah
-              di setiap rarity (saat box dibuka), maupun probabilitas rarity saat
-              membeli box 1 / 2 / 3 credit.
+              Master data rarity & hadiah per tenant. Di sini Admin bisa
+              mengatur probabilitas <span className="font-semibold">real</span>{" "}
+              &amp; <span className="font-semibold">gimmick</span> baik untuk
+              hadiah di setiap rarity (saat box dibuka), maupun probabilitas
+              rarity saat membeli box 1 / 2 / 3 credit.
             </p>
           </div>
           {profile && profile.role === "CS" && (
@@ -603,13 +775,18 @@ export default function PanelBoxesPage() {
                             <th className="px-3 py-2 text-left font-semibold text-slate-300">
                               Status
                             </th>
+                            {canEdit && (
+                              <th className="px-3 py-2 text-left font-semibold text-slate-300">
+                                Aksi
+                              </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
                           {rar.rewards.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={6}
+                                colSpan={canEdit ? 7 : 6}
                                 className="px-3 py-3 text-center text-slate-400"
                               >
                                 Belum ada reward untuk rarity ini.
@@ -643,7 +820,7 @@ export default function PanelBoxesPage() {
                                         rar.id,
                                         rw.id,
                                         "real_probability",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                   />
@@ -661,7 +838,7 @@ export default function PanelBoxesPage() {
                                         rar.id,
                                         rw.id,
                                         "gimmick_probability",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                   />
@@ -675,7 +852,7 @@ export default function PanelBoxesPage() {
                                         rar.id,
                                         rw.id,
                                         "is_active",
-                                        !rw.is_active
+                                        !rw.is_active,
                                       )
                                     }
                                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] border ${
@@ -691,6 +868,19 @@ export default function PanelBoxesPage() {
                                     {rw.is_active ? "Aktif" : "Non-aktif"}
                                   </button>
                                 </td>
+                                {canEdit && (
+                                  <td className="px-3 py-2 align-middle">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openEditRewardModal(rar, rw)
+                                      }
+                                      className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:bg-slate-800 transition"
+                                    >
+                                      Edit
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
                             ))
                           )}
@@ -713,22 +903,31 @@ export default function PanelBoxesPage() {
                         .
                       </p>
                       {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => handleSaveRarity(rar.id)}
-                          disabled={
-                            savingRarityId === rar.id ||
-                            !rar.rewards.length ||
-                            !sumOk
-                          }
-                          className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                        >
-                          {savingRarityId === rar.id
-                            ? "Menyimpan..."
-                            : sumOk
-                            ? "Simpan konfigurasi"
-                            : "Total belum 100%"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openCreateRewardModal(rar)}
+                            className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 transition"
+                          >
+                            Tambah Hadiah
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveRarity(rar.id)}
+                            disabled={
+                              savingRarityId === rar.id ||
+                              !rar.rewards.length ||
+                              !sumOk
+                            }
+                            className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                          >
+                            {savingRarityId === rar.id
+                              ? "Menyimpan..."
+                              : sumOk
+                              ? "Simpan konfigurasi"
+                              : "Total belum 100%"}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </section>
@@ -850,7 +1049,7 @@ export default function PanelBoxesPage() {
                                         tier,
                                         row.id,
                                         "real_probability",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                   />
@@ -868,7 +1067,7 @@ export default function PanelBoxesPage() {
                                         tier,
                                         row.id,
                                         "gimmick_probability",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                   />
@@ -882,7 +1081,7 @@ export default function PanelBoxesPage() {
                                         tier,
                                         row.id,
                                         "is_active",
-                                        !row.is_active
+                                        !row.is_active,
                                       )
                                     }
                                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] border ${
@@ -919,9 +1118,7 @@ export default function PanelBoxesPage() {
                           type="button"
                           onClick={() => handleSaveTier(tier)}
                           disabled={
-                            savingTier === tier ||
-                            !tierRows.length ||
-                            !sumOk
+                            savingTier === tier || !tierRows.length || !sumOk
                           }
                           className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
                         >
@@ -940,6 +1137,120 @@ export default function PanelBoxesPage() {
           </>
         )}
       </div>
+
+      {/* Modal Tambah/Edit Hadiah */}
+      {rewardModalOpen && rewardModalRarity && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+            <h2 className="text-lg font-semibold">
+              {rewardModalMode === "create"
+                ? `Tambah Hadiah (${rewardModalRarity.name})`
+                : `Edit Hadiah (${rewardModalRarity.name})`}
+            </h2>
+
+            <form onSubmit={handleRewardModalSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="rw-label">
+                  Nama hadiah
+                </label>
+                <input
+                  id="rw-label"
+                  type="text"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="contoh: Saldo 5k / HP Android"
+                  value={rewardLabel}
+                  onChange={(e) => setRewardLabel(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="rw-type">
+                    Tipe
+                  </label>
+                  <select
+                    id="rw-type"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={rewardType}
+                    onChange={(e) =>
+                      setRewardType(
+                        e.target.value === "ITEM" ? "ITEM" : "CASH",
+                      )
+                    }
+                  >
+                    <option value="CASH">CASH (saldo)</option>
+                    <option value="ITEM">ITEM (barang)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    className="text-sm font-medium"
+                    htmlFor="rw-amount"
+                  >
+                    Nominal (untuk CASH)
+                  </label>
+                  <input
+                    id="rw-amount"
+                    type="number"
+                    min={0}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    placeholder="5000"
+                    value={rewardAmount}
+                    onChange={(e) => setRewardAmount(e.target.value)}
+                    disabled={rewardType !== "CASH"}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRewardIsActive((v) => !v)}
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs border ${
+                    rewardIsActive
+                      ? "border-emerald-500/70 bg-emerald-900/60 text-emerald-200"
+                      : "border-slate-600 bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  {rewardIsActive ? "Aktif" : "Non-aktif"}
+                </button>
+                <span className="text-[11px] text-slate-400">
+                  Status awal hadiah (bisa diubah lagi dari tabel).
+                </span>
+              </div>
+
+              {rewardError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {rewardError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeRewardModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={rewardSaving}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={rewardSaving || !rewardLabel.trim()}
+                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {rewardSaving
+                    ? "Menyimpan..."
+                    : rewardModalMode === "create"
+                    ? "Tambah Hadiah"
+                    : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
