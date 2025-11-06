@@ -32,10 +32,6 @@ type InventoryBox = {
   status: "PURCHASED" | "OPENED" | "EXPIRED";
   expires_at: string;
   created_at: string;
-  rarity?: {
-    code: string;
-    name: string;
-  } | null;
 };
 
 type OpenBoxResult = {
@@ -54,45 +50,6 @@ type OpenBoxResult = {
 
 type OpenedBoxInfo = OpenBoxResult & { credit_tier: number };
 
-type InfoType = "success" | "error";
-
-type PurchasePopupState = {
-  tier: number;
-  rarity_name: string;
-  rarity_code: string;
-};
-
-type OpenPopupState = {
-  tier: number;
-  rarity_name: string;
-  rarity_code: string;
-  reward_label: string;
-  reward_type: string;
-  reward_amount: number;
-};
-
-function rarityBadgeClasses(code?: string | null): string {
-  const c = code?.toUpperCase();
-  switch (c) {
-    case "COMMON":
-      return "border-emerald-500/60 bg-emerald-900/40 text-emerald-200";
-    case "RARE":
-      return "border-sky-400/70 bg-sky-900/50 text-sky-200";
-    case "EPIC":
-      return "border-violet-400/80 bg-violet-900/60 text-violet-200";
-    case "SUPREME":
-      return "border-amber-400/80 bg-amber-900/60 text-amber-200";
-    case "LEGENDARY":
-      return "border-orange-400/80 bg-orange-900/70 text-orange-200";
-    case "SPECIAL_LEGENDARY":
-    case "SLEGEND":
-    case "SLEGENDARY":
-      return "border-fuchsia-400/80 bg-gradient-to-r from-fuchsia-500/30 via-amber-400/30 to-sky-400/30 text-amber-50";
-    default:
-      return "border-slate-500/70 bg-slate-800/70 text-slate-100";
-  }
-}
-
 export default function MemberHomePage() {
   const router = useRouter();
 
@@ -106,23 +63,16 @@ export default function MemberHomePage() {
   );
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [infoType, setInfoType] = useState<InfoType | null>(null);
+  const [infoType, setInfoType] = useState<"success" | "error" | null>(
+    null,
+  );
 
   // inventory box yang belum dibuka
   const [inventory, setInventory] = useState<InventoryBox[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [inventoryError, setInventoryError] = useState<string | null>(
-    null,
-  );
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [lastOpened, setLastOpened] = useState<OpenedBoxInfo | null>(null);
-
-  // animasi / popup
-  const [purchasePopup, setPurchasePopup] =
-    useState<PurchasePopupState | null>(null);
-  const [openPopup, setOpenPopup] = useState<OpenPopupState | null>(
-    null,
-  );
 
   // ------------------- load profil member -------------------
 
@@ -194,17 +144,7 @@ export default function MemberHomePage() {
       const { data, error } = await supabase
         .from("box_transactions")
         .select(
-          `
-          id,
-          credit_tier,
-          status,
-          expires_at,
-          created_at,
-          rarity:box_rarities(
-            code,
-            name
-          )
-        `,
+          "id, credit_tier, status, expires_at, created_at",
         )
         .eq("member_profile_id", profile.id)
         .eq("status", "PURCHASED")
@@ -240,7 +180,7 @@ export default function MemberHomePage() {
     router.push("/member/login");
   }
 
-  function showInfo(msg: string, type: InfoType) {
+  function showInfo(msg: string, type: "success" | "error") {
     setInfoMessage(msg);
     setInfoType(type);
     setTimeout(() => {
@@ -255,14 +195,6 @@ export default function MemberHomePage() {
     return d.toLocaleString("id-ID", {
       dateStyle: "short",
       timeStyle: "short",
-    });
-  }
-
-  function formatRupiah(n: number) {
-    return n.toLocaleString("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
     });
   }
 
@@ -316,13 +248,6 @@ export default function MemberHomePage() {
         `Berhasil membeli box ${result.credit_tier} credit. Rarity: ${result.rarity_name} (${result.rarity_code}).`,
         "success",
       );
-
-      // popup animasi "box dibeli"
-      setPurchasePopup({
-        tier: result.credit_tier,
-        rarity_name: result.rarity_name,
-        rarity_code: result.rarity_code,
-      });
     } catch (err: any) {
       console.error(err);
       showInfo(
@@ -381,16 +306,6 @@ export default function MemberHomePage() {
         `Box ${box.credit_tier} credit terbuka! Rarity: ${result.rarity_name} (${result.rarity_code}) — Hadiah: ${result.reward_label}`,
         "success",
       );
-
-      // popup animasi "box terbuka"
-      setOpenPopup({
-        tier: box.credit_tier,
-        rarity_name: result.rarity_name,
-        rarity_code: result.rarity_code,
-        reward_label: result.reward_label,
-        reward_type: result.reward_type,
-        reward_amount: result.reward_amount,
-      });
     } catch (err: any) {
       console.error(err);
       showInfo(
@@ -407,21 +322,23 @@ export default function MemberHomePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#02010a] text-slate-200">
-        <p className="text-sm">Memuat data member...</p>
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-slate-300">
+          Memuat data member...
+        </p>
       </main>
     );
   }
 
   if (error) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-[#02010a] px-4 text-slate-100">
-        <p className="mb-4 rounded-xl border border-red-900/70 bg-red-950/60 px-4 py-3 text-sm text-red-100 shadow-lg shadow-red-900/50">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4">
+        <p className="mb-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
           {error}
         </p>
         <button
           onClick={() => router.push("/member/login")}
-          className="rounded-full border border-slate-600 px-4 py-2 text-xs text-slate-200 hover:bg-slate-800 transition"
+          className="rounded-lg border border-slate-600 px-4 py-2 text-xs text-slate-200 hover:bg-slate-800 transition"
         >
           Kembali ke login member
         </button>
@@ -431,407 +348,271 @@ export default function MemberHomePage() {
 
   if (!profile) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#02010a] text-slate-200">
-        <p className="text-sm">Profil tidak ditemukan.</p>
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-slate-300">
+          Profil tidak ditemukan.
+        </p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#02010a] text-slate-50">
-      <div className="relative min-h-screen overflow-hidden">
-        {/* background fantasy glow */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.18),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(236,72,153,0.18),_transparent_60%)] opacity-90" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.98))]" />
-
-        <div className="relative z-10 mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
-          {/* Header */}
-          <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-sky-400/80">
-                Member Site
+    <main className="min-h-screen flex items-start justify-center px-4 py-10">
+      <div className="w-full max-w-3xl space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+              Member Site
+            </p>
+            <h1 className="text-2xl font-semibold">
+              Masuk ke Dunia Fantasy
+            </h1>
+            <p className="text-sm text-slate-400">
+              Beli mystery box dengan credit kamu. Setiap box punya peluang
+              rarity yang berbeda.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-right">
+              <p className="text-xs text-slate-400">
+                Login sebagai
               </p>
-              <h1 className="mt-2 bg-gradient-to-r from-sky-300 via-fuchsia-400 to-amber-300 bg-clip-text text-3xl font-semibold text-transparent sm:text-4xl">
-                Masuk ke Dunia Fantasy
-              </h1>
-              <p className="mt-2 max-w-xl text-sm text-slate-300">
-                Beli mystery box dengan credit kamu. Setiap box punya peluang
-                rarity yang berbeda. Semakin tinggi tier, semakin besar peluang
-                rarity tinggi.
+              <p className="text-sm font-semibold">
+                {profile.username || "Member"}
+              </p>
+              <p className="text-xs text-emerald-300">
+                {profile.credit_balance ?? 0} credit
               </p>
             </div>
-
-            <div className="flex flex-col items-end gap-2">
-              <div className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-4 py-3 text-right shadow-lg shadow-sky-900/40">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                  Login sebagai
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-50">
-                  {profile.username || "Member"}
-                </p>
-                <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-1 text-[11px] font-medium text-white shadow-md shadow-fuchsia-700/40">
-                  <span>✨</span>
-                  <span>{profile.credit_balance ?? 0} credit</span>
-                </p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="rounded-full border border-slate-600/80 px-4 py-1.5 text-xs text-slate-200 transition hover:border-fuchsia-400 hover:bg-slate-900/80"
-              >
-                Logout
-              </button>
-            </div>
-          </header>
-
-          {/* Info message */}
-          {infoMessage && infoType && (
-            <div
-              className={`mb-4 rounded-xl border px-4 py-3 text-sm shadow-lg ${
-                infoType === "success"
-                  ? "border-emerald-500/70 bg-emerald-950/50 text-emerald-100 shadow-emerald-900/40"
-                  : "border-rose-500/70 bg-rose-950/60 text-rose-100 shadow-rose-900/40"
-              }`}
+            <button
+              onClick={handleLogout}
+              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800 transition"
             >
-              {infoMessage}
-            </div>
-          )}
-
-          {/* Kartu box (beli) */}
-          <section className="mb-8">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                Pilih Box
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Credit akan dipakai untuk membeli Mystery Box (1 / 2 / 3
-                credit).
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Box 1 */}
-              <div className="group relative overflow-hidden rounded-2xl border border-sky-400/60 bg-slate-950/80 px-4 py-4 shadow-lg shadow-sky-900/50 transition hover:-translate-y-1 hover:shadow-2xl">
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900/60 via-slate-900/10 to-slate-950/90" />
-                <div className="relative z-10 flex h-full flex-col justify-between">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500/80 via-violet-500/80 to-fuchsia-500/80 px-3 py-1 text-[11px] font-semibold text-white">
-                      <span>🎁</span>
-                      <span>Box 1 Credit</span>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                      Start dari Common
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Minimal dapat <span className="font-semibold">Common</span>.
-                      Cocok buat coba peruntungan.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleBuyBox(1)}
-                    disabled={buyingTier === 1}
-                    className="mt-4 w-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-fuchsia-800/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {buyingTier === 1 ? "Memproses..." : "Beli Box 1 Credit"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Box 2 */}
-              <div className="group relative overflow-hidden rounded-2xl border border-violet-400/70 bg-slate-950/80 px-4 py-4 shadow-lg shadow-violet-900/60 transition hover:-translate-y-1 hover:shadow-2xl">
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900/60 via-slate-900/10 to-slate-950/90" />
-                <div className="relative z-10 flex h-full flex-col justify-between">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500/80 via-fuchsia-500/80 to-rose-500/80 px-3 py-1 text-[11px] font-semibold text-white">
-                      <span>🎁</span>
-                      <span>Box 2 Credit</span>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                      Start dari Rare
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Start dari <span className="font-semibold">Rare</span> ke
-                      atas. Common tidak mungkin keluar.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleBuyBox(2)}
-                    disabled={buyingTier === 2}
-                    className="mt-4 w-full rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-violet-800/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {buyingTier === 2 ? "Memproses..." : "Beli Box 2 Credit"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Box 3 */}
-              <div className="group relative overflow-hidden rounded-2xl border border-fuchsia-400/70 bg-slate-950/80 px-4 py-4 shadow-lg shadow-fuchsia-900/70 transition hover:-translate-y-1 hover:shadow-2xl">
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900/60 via-slate-900/10 to-slate-950/90" />
-                <div className="relative z-10 flex h-full flex-col justify-between">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-500/80 via-pink-500/80 to-amber-400/80 px-3 py-1 text-[11px] font-semibold text-white">
-                      <span>🎁</span>
-                      <span>Box 3 Credit</span>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                      Start dari Epic
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Start dari <span className="font-semibold">Epic</span> ke
-                      atas. Common &amp; Rare tidak mungkin keluar.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleBuyBox(3)}
-                    disabled={buyingTier === 3}
-                    className="mt-4 w-full rounded-full bg-gradient-to-r from-fuchsia-500 to-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 shadow-md shadow-amber-700/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {buyingTier === 3 ? "Memproses..." : "Beli Box 3 Credit"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Inventory box */}
-          <section className="mb-8 rounded-2xl border border-slate-700/80 bg-slate-950/80 px-4 py-4 shadow-inner shadow-slate-900/80">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-100">
-                  Inventory Box Kamu
-                </h2>
-                <p className="text-[11px] text-slate-400">
-                  Box bisa disimpan maksimal 7 hari. Setelah itu akan hangus
-                  otomatis.
-                </p>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {inventory.length} box menunggu dibuka
-              </p>
-            </div>
-
-            {inventoryError && (
-              <p className="mb-2 rounded-lg border border-red-900/60 bg-red-950/50 px-3 py-2 text-[11px] text-red-200">
-                {inventoryError}
-              </p>
-            )}
-
-            {inventoryLoading ? (
-              <p className="text-xs text-slate-400">
-                Memuat inventory box...
-              </p>
-            ) : inventory.length === 0 ? (
-              <p className="text-xs text-slate-400">
-                Kamu belum punya box yang menunggu dibuka.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {inventory.map((box) => (
-                  <li
-                    key={box.id}
-                    className={`flex flex-col gap-3 rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-3 text-xs text-slate-100 transition sm:flex-row sm:items-center sm:justify-between ${
-                      openingId === box.id
-                        ? "border-amber-400/80 animate-pulse"
-                        : ""
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-slate-50">
-                        Box {box.credit_tier} Credit
-                      </p>
-                      {box.rarity && (
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${rarityBadgeClasses(
-                            box.rarity.code,
-                          )}`}
-                        >
-                          {box.rarity.name} ({box.rarity.code})
-                        </span>
-                      )}
-                      <p className="text-[11px] text-slate-400">
-                        Kadaluarsa:{" "}
-                        <span className="font-medium text-slate-100">
-                          {formatDateTime(box.expires_at)}
-                        </span>
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleOpenBox(box)}
-                      disabled={openingId === box.id}
-                      className="rounded-full bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-1.5 text-[11px] font-semibold text-slate-900 shadow-md shadow-amber-700/50 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {openingId === box.id ? "Membuka..." : "Buka Box"}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Pembelian terakhir */}
-          {lastPurchase && (
-            <section className="mb-4 rounded-2xl border border-slate-700/80 bg-slate-950/80 px-4 py-4 shadow-inner shadow-slate-900/80">
-              <h2 className="text-sm font-semibold text-slate-100">
-                Pembelian Terakhir
-              </h2>
-              <p className="mt-1 text-xs text-slate-300">
-                Box{" "}
-                <span className="font-semibold">
-                  {lastPurchase.credit_tier}
-                </span>{" "}
-                credit, rarity{" "}
-                <span className="font-semibold text-fuchsia-200">
-                  {lastPurchase.rarity_name} ({lastPurchase.rarity_code})
-                </span>
-                .
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Credit sebelum beli:{" "}
-                <span className="font-semibold">
-                  {lastPurchase.credits_before}
-                </span>{" "}
-                • setelah beli:{" "}
-                <span className="font-semibold">
-                  {lastPurchase.credits_after}
-                </span>
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Box ini bisa dibuka sampai{" "}
-                <span className="font-semibold">
-                  {formatDateTime(lastPurchase.expires_at)}
-                </span>
-                .
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                (Inventory & tombol buka box tersedia di bagian atas.)
-              </p>
-            </section>
-          )}
-
-          {/* Box terakhir dibuka */}
-          {lastOpened && (
-            <section className="mb-4 rounded-2xl border border-amber-500/70 bg-gradient-to-br from-amber-900/70 via-amber-950/90 to-slate-950/95 px-4 py-4 shadow-[0_0_40px_rgba(245,158,11,0.45)]">
-              <h2 className="text-sm font-semibold text-amber-100">
-                Box Terakhir Dibuka
-              </h2>
-              <p className="mt-1 text-xs text-amber-100">
-                Box{" "}
-                <span className="font-semibold">
-                  {lastOpened.credit_tier}
-                </span>{" "}
-                credit dengan rarity{" "}
-                <span className="font-semibold">
-                  {lastOpened.rarity_name} ({lastOpened.rarity_code})
-                </span>
-                .
-              </p>
-              <p className="mt-1 text-xs text-amber-100">
-                Hadiah:{" "}
-                <span className="font-semibold">
-                  {lastOpened.reward_label}
-                </span>
-                {lastOpened.reward_type === "CASH" &&
-                  ` (${formatRupiah(lastOpened.reward_amount)})`}
-              </p>
-              <p className="mt-1 text-[11px] text-amber-200">
-                Dibuka pada{" "}
-                <span className="font-semibold">
-                  {formatDateTime(lastOpened.opened_at)}
-                </span>
-                .
-              </p>
-              <p className="mt-1 text-[11px] text-amber-200">
-                Setelah ini, hadiah akan ditindaklanjuti oleh Admin / CS via
-                kontak yang disediakan di member site.
-              </p>
-            </section>
-          )}
+              Logout
+            </button>
+          </div>
         </div>
 
-        {/* Popup: Box Dibeli */}
-        {purchasePopup && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="relative w-full max-w-md rounded-3xl border border-fuchsia-400/80 bg-gradient-to-b from-slate-950 via-fuchsia-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(217,70,239,0.7)]">
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="h-32 w-32 animate-ping rounded-full bg-fuchsia-400/40" />
-              </div>
-              <div className="relative z-10">
-                <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-fuchsia-400 via-violet-500 to-sky-500 text-4xl shadow-lg shadow-fuchsia-900/70 animate-bounce">
-                  📦
-                </div>
-                <p className="text-xs uppercase tracking-[0.25em] text-fuchsia-300">
-                  Box Dibeli!
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-slate-50">
-                  Box {purchasePopup.tier} credit berhasil dibeli
-                </h3>
-                <p className="mt-2 text-sm text-slate-200">
-                  Rarity box ini:{" "}
-                  <span className="font-semibold text-fuchsia-200">
-                    {purchasePopup.rarity_name} ({purchasePopup.rarity_code})
-                  </span>
-                </p>
-                <p className="mt-2 text-sm text-slate-200">
-                  Box baru sudah masuk ke{" "}
-                  <span className="font-semibold">Inventory</span> kamu.
-                </p>
-                <p className="mt-1 text-[11px] text-slate-300">
-                  Kamu bisa membukanya kapan saja sebelum kadaluarsa.
-                </p>
-                <button
-                  onClick={() => setPurchasePopup(null)}
-                  className="mt-4 rounded-full border border-slate-600/80 bg-slate-900/80 px-5 py-2 text-xs font-semibold text-slate-100 hover:border-fuchsia-400 hover:bg-slate-900 transition"
-                >
-                  Oke, mengerti
-                </button>
-              </div>
-            </div>
+        {/* Info message */}
+        {infoMessage && infoType && (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              infoType === "success"
+                ? "border-emerald-500/70 bg-emerald-950/40 text-emerald-200"
+                : "border-red-500/70 bg-red-950/40 text-red-200"
+            }`}
+          >
+            {infoMessage}
           </div>
         )}
 
-        {/* Popup: Box Terbuka */}
-        {openPopup && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="relative w-full max-w-md rounded-3xl border border-amber-400/80 bg-gradient-to-b from-slate-950 via-amber-950/70 to-slate-950 px-6 py-6 text-center shadow-[0_0_60px_rgba(245,158,11,0.7)]">
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="h-32 w-32 animate-ping rounded-full bg-amber-400/40" />
-              </div>
-              <div className="relative z-10">
-                <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 via-orange-500 to-amber-700 text-4xl shadow-lg shadow-amber-900/70 animate-bounce">
-                  🧰
-                </div>
-                <p className="text-xs uppercase tracking-[0.25em] text-amber-300">
-                  Box Terbuka!
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-slate-50">
-                  Box {openPopup.tier} credit berhasil dibuka
-                </h3>
-                <p className="mt-2 text-sm text-slate-200">
-                  Rarity:{" "}
-                  <span className="font-semibold text-amber-200">
-                    {openPopup.rarity_name} ({openPopup.rarity_code})
-                  </span>
-                </p>
-                <p className="mt-1 text-sm text-slate-200">
-                  Hadiah:{" "}
-                  <span className="font-semibold text-amber-200">
-                    {openPopup.reward_label}
-                  </span>
-                  {openPopup.reward_type === "CASH" &&
-                    ` (${formatRupiah(openPopup.reward_amount)})`}
-                </p>
-                <p className="mt-3 text-[11px] text-slate-300">
-                  Silahkan hubungi Admin / CS untuk klaim hadiah. (Link kontak
-                  bisa kamu tambahkan di member site.)
-                </p>
-                <button
-                  onClick={() => setOpenPopup(null)}
-                  className="mt-4 rounded-full border border-slate-600/80 bg-slate-900/80 px-5 py-2 text-xs font-semibold text-slate-100 hover:border-amber-400 hover:bg-slate-900 transition"
-                >
-                  Tutup
-                </button>
-              </div>
+        {/* Kartu box (beli) */}
+        <section className="grid gap-4 md:grid-cols-3">
+          {/* Box 1 credit */}
+          <div className="rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Box 1 Credit
+              </h2>
+              <p className="text-xs text-slate-400">
+                Minimal dapat <span className="font-semibold">Common</span>.
+                Cocok buat coba peruntungan.
+              </p>
             </div>
+            <button
+              onClick={() => handleBuyBox(1)}
+              disabled={buyingTier === 1}
+              className="mt-4 w-full rounded-xl bg-violet-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-violet-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {buyingTier === 1 ? "Memproses..." : "Beli Box 1 Credit"}
+            </button>
           </div>
+
+          {/* Box 2 credit */}
+          <div className="rounded-2xl border border-sky-700/70 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-sky-100">
+                Box 2 Credit
+              </h2>
+              <p className="text-xs text-slate-300">
+                Start dari{" "}
+                <span className="font-semibold text-sky-300">Rare</span> ke
+                atas. Common tidak mungkin keluar.
+              </p>
+            </div>
+            <button
+              onClick={() => handleBuyBox(2)}
+              disabled={buyingTier === 2}
+              className="mt-4 w-full rounded-xl bg-sky-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {buyingTier === 2 ? "Memproses..." : "Beli Box 2 Credit"}
+            </button>
+          </div>
+
+          {/* Box 3 credit */}
+          <div className="rounded-2xl border border-purple-700/70 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-purple-100">
+                Box 3 Credit
+              </h2>
+              <p className="text-xs text-slate-300">
+                Start dari{" "}
+                <span className="font-semibold text-purple-300">Epic</span>{" "}
+                ke atas. Common &amp; Rare tidak mungkin keluar.
+              </p>
+            </div>
+            <button
+              onClick={() => handleBuyBox(3)}
+              disabled={buyingTier === 3}
+              className="mt-4 w-full rounded-xl bg-purple-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-purple-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {buyingTier === 3 ? "Memproses..." : "Beli Box 3 Credit"}
+            </button>
+          </div>
+        </section>
+
+        {/* Inventory box */}
+        <section className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">
+                Inventory Box Kamu
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                Box bisa disimpan maksimal 7 hari. Setelah itu akan hangus
+                otomatis.
+              </p>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {inventory.length} box menunggu dibuka
+            </p>
+          </div>
+
+          {inventoryError && (
+            <p className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-[11px] text-red-200">
+              {inventoryError}
+            </p>
+          )}
+
+          {inventoryLoading ? (
+            <p className="text-xs text-slate-400">
+              Memuat inventory box...
+            </p>
+          ) : inventory.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              Kamu belum punya box yang menunggu dibuka.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {inventory.map((box) => (
+                <li
+                  key={box.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-950/80 px-3 py-3"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-slate-100">
+                      Box {box.credit_tier} Credit
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Kadaluarsa:{" "}
+                      <span className="font-medium">
+                        {formatDateTime(box.expires_at)}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleOpenBox(box)}
+                    disabled={openingId === box.id}
+                    className="rounded-xl bg-amber-400 px-3 py-2 text-[11px] font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                  >
+                    {openingId === box.id ? "Membuka..." : "Buka Box"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Pembelian terakhir */}
+        {lastPurchase && (
+          <section className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 space-y-2">
+            <h2 className="text-sm font-semibold">
+              Pembelian Terakhir
+            </h2>
+            <p className="text-xs text-slate-300">
+              Box{" "}
+              <span className="font-semibold">
+                {lastPurchase.credit_tier}
+              </span>{" "}
+              credit, rarity{" "}
+              <span className="font-semibold">
+                {lastPurchase.rarity_name} ({lastPurchase.rarity_code})
+              </span>
+              .
+            </p>
+            <p className="text-xs text-slate-400">
+              Credit sebelum beli:{" "}
+              <span className="font-semibold">
+                {lastPurchase.credits_before}
+              </span>{" "}
+              • setelah beli:{" "}
+              <span className="font-semibold">
+                {lastPurchase.credits_after}
+              </span>
+            </p>
+            <p className="text-xs text-slate-400">
+              Box ini bisa dibuka sampai{" "}
+              <span className="font-semibold">
+                {formatDateTime(lastPurchase.expires_at)}
+              </span>
+              .
+            </p>
+            <p className="text-[11px] text-slate-500">
+              (Inventory & tombol buka box tersedia di bagian atas.)
+            </p>
+          </section>
+        )}
+
+        {/* Box terakhir dibuka */}
+        {lastOpened && (
+          <section className="mt-2 rounded-2xl border border-amber-500/70 bg-amber-950/40 p-4 space-y-2">
+            <h2 className="text-sm font-semibold text-amber-100">
+              Box Terakhir Dibuka
+            </h2>
+            <p className="text-xs text-amber-100">
+              Box{" "}
+              <span className="font-semibold">
+                {lastOpened.credit_tier}
+              </span>{" "}
+              credit dengan rarity{" "}
+              <span className="font-semibold">
+                {lastOpened.rarity_name} ({lastOpened.rarity_code})
+              </span>
+              .
+            </p>
+            <p className="text-xs text-amber-100">
+              Hadiah:{" "}
+              <span className="font-semibold">
+                {lastOpened.reward_label}
+              </span>
+              {lastOpened.reward_type === "CASH" &&
+                ` (Rp ${lastOpened.reward_amount.toLocaleString(
+                  "id-ID",
+                )})`}
+            </p>
+            <p className="text-[11px] text-amber-200">
+              Dibuka pada{" "}
+              <span className="font-semibold">
+                {formatDateTime(lastOpened.opened_at)}
+              </span>
+              .
+            </p>
+            <p className="text-[11px] text-amber-200">
+              Setelah ini, hadiah akan ditindaklanjuti oleh Admin / CS via
+              kontak yang disediakan di member site.
+            </p>
+          </section>
         )}
       </div>
     </main>
