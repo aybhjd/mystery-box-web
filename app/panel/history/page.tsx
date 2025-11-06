@@ -12,7 +12,7 @@ type PanelProfile = {
   role: UserRole;
 };
 
-type HistoryRow = {
+type TxBase = {
   id: string;
   member_profile_id: string;
   credit_tier: number;
@@ -25,22 +25,30 @@ type HistoryRow = {
   created_at: string;
   rarity_id: string;
   reward_id: string | null;
+};
 
-  // relasi -> array
-  member: {
-    username: string | null;
-  }[] | null;
+type MemberShort = {
+  id: string;
+  username: string | null;
+};
 
-  rarity: {
-    code: string;
-    name: string;
-  }[] | null;
+type RarityShort = {
+  id: string;
+  code: string;
+  name: string;
+};
 
-  reward: {
-    label: string;
-    reward_type: string;
-    amount: number | null;
-  }[] | null;
+type RewardShort = {
+  id: string;
+  label: string;
+  reward_type: string;
+  amount: number | null;
+};
+
+type HistoryRow = TxBase & {
+  member: MemberShort | null;
+  rarity: RarityShort | null;
+  reward: RewardShort | null;
 };
 
 export default function PanelHistoryPage() {
@@ -66,7 +74,7 @@ export default function PanelHistoryPage() {
     null,
   );
 
-  // 1. Load profile admin/CS
+  // 1. Load profile admin / CS
   useEffect(() => {
     async function loadProfile() {
       setLoadingProfile(true);
@@ -121,57 +129,124 @@ export default function PanelHistoryPage() {
     loadProfile();
   }, [router]);
 
-  // 2. Load history transaksi box
+  // 2. Load history transaksi box (+ lookup member/rarity/reward)
   useEffect(() => {
     async function loadRows() {
       if (!profile) return;
       setLoadingRows(true);
       setRowsError(null);
 
-      // ambil transaksi di tenant ini, join dengan member, rarity, reward
-      const { data, error } = await supabase
-        .from("box_transactions")
-        .select(
-          `
-          id,
-          member_profile_id,
-          credit_tier,
-          credit_spent,
-          status,
-          expires_at,
-          opened_at,
-          processed,
-          processed_at,
-          created_at,
-          rarity_id,
-          reward_id,
-          member:profiles!box_transactions_member_profile_id_fkey (
-            username
-          ),
-          rarity:box_rarities!box_transactions_rarity_id_fkey (
-            code,
-            name
-          ),
-          reward:box_rewards!box_transactions_reward_id_fkey (
-            label,
-            reward_type,
-            amount
+      try {
+        // ambil transaksi dulu
+        const { data: txData, error: txErr } = await supabase
+          .from("box_transactions")
+          .select(
+            `
+            id,
+            member_profile_id,
+            credit_tier,
+            credit_spent,
+            status,
+            expires_at,
+            opened_at,
+            processed,
+            processed_at,
+            created_at,
+            rarity_id,
+            reward_id
+          `,
           )
-        `,
-        )
-        .eq("tenant_id", profile.tenant_id)
-        .order("created_at", { ascending: false })
-        .limit(100);
+          .eq("tenant_id", profile.tenant_id)
+          .order("created_at", { ascending: false })
+          .limit(100);
 
-      if (error) {
-        console.error(error);
-        setRowsError("Gagal membaca history transaksi.");
+        if (txErr) {
+          console.error(txErr);
+          setRowsError("Gagal membaca history transaksi.");
+          setLoadingRows(false);
+          return;
+        }
+
+        const baseRows = (txData || []) as TxBase[];
+
+        if (baseRows.length === 0) {
+          setRows([]);
+          setLoadingRows(false);
+          return;
+        }
+
+        // kumpulkan id untuk lookup
+        const memberIds = Array.from(
+          new Set(baseRows.map((r) => r.member_profile_id)),
+        );
+        const rarityIds = Array.from(
+          new Set(baseRows.map((r) => r.rarity_id)),
+        );
+        const rewardIds = Array.from(
+          new Set(
+            baseRows
+              .map((r) => r.reward_id)
+              .filter((v): v is string => !!v),
+          ),
+        );
+
+        // ambil data lookup paralel
+        const [
+          { data: memberData, error: memberErr },
+          { data: rarityData, error: rarityErr },
+          { data: rewardData, error: rewardErr },
+        ] = await Promise.all([
+          memberIds.length
+            ? supabase
+                .from("profiles")
+                .select("id, username")
+                .in("id", memberIds)
+            : Promise.resolve({ data: [] as MemberShort[], error: null }),
+          rarityIds.length
+            ? supabase
+                .from("box_rarities")
+                .select("id, code, name")
+                .in("id", rarityIds)
+            : Promise.resolve({ data: [] as RarityShort[], error: null }),
+          rewardIds.length
+            ? supabase
+                .from("box_rewards")
+                .select("id, label, reward_type, amount")
+                .in("id", rewardIds)
+            : Promise.resolve({ data: [] as RewardShort[], error: null }),
+        ]);
+
+        if (memberErr || rarityErr || rewardErr) {
+          console.error(memberErr || rarityErr || rewardErr);
+          setRowsError("Gagal membaca data tambahan (member/rarity/reward).");
+          setLoadingRows(false);
+          return;
+        }
+
+        const memberMap = new Map(
+          (memberData || []).map((m) => [m.id, m as MemberShort]),
+        );
+        const rarityMap = new Map(
+          (rarityData || []).map((r) => [r.id, r as RarityShort]),
+        );
+        const rewardMap = new Map(
+          (rewardData || []).map((r) => [r.id, r as RewardShort]),
+        );
+
+        const fullRows: HistoryRow[] = baseRows.map((r) => ({
+          ...r,
+          member: memberMap.get(r.member_profile_id) || null,
+          rarity: rarityMap.get(r.rarity_id) || null,
+          reward: r.reward_id ? rewardMap.get(r.reward_id) || null : null,
+        }));
+
+        setRows(fullRows);
         setLoadingRows(false);
-        return;
+      } catch (err) {
+        console.error(err);
+        setRowsError("Terjadi kesalahan saat membaca history transaksi.");
+        setLoadingRows(false);
       }
-
-      setRows((data || []) as HistoryRow[]);
-      setLoadingRows(false);
     }
 
     loadRows();
@@ -198,9 +273,7 @@ export default function PanelHistoryPage() {
       }
 
       if (searchUsername.trim() !== "") {
-        const u = (row.member?.[0]?.username || "")
-          .toLowerCase()
-          .trim();
+        const u = (row.member?.username || "").toLowerCase().trim();
         if (!u.includes(searchUsername.toLowerCase().trim())) {
           return false;
         }
@@ -326,7 +399,6 @@ export default function PanelHistoryPage() {
           </p>
         </div>
 
-        {/* Info + filter kecil */}
         <div className="flex flex-col items-end gap-2 md:items-end">
           <p className="text-[11px] text-slate-500">
             Menampilkan {filteredRows.length} dari {rows.length} transaksi
@@ -449,24 +521,24 @@ export default function PanelHistoryPage() {
               </tr>
             ) : (
               filteredRows.map((row) => {
-                const rarityObj = row.rarity?.[0];
-                const rarityText = rarityObj
-                  ? `${rarityObj.name} (${rarityObj.code})`
+                const rarityText = row.rarity
+                  ? `${row.rarity.name} (${row.rarity.code})`
                   : "-";
 
                 let rewardText = "-";
-                const rewardObj = row.reward?.[0];
-
-                if (rewardObj) {
-                  if (rewardObj.reward_type === "CASH") {
-                    const amount = rewardObj.amount || 0;
-                    rewardText = `${rewardObj.label} - Rp ${amount.toLocaleString(
+                if (row.reward) {
+                  if (row.reward.reward_type === "CASH") {
+                    const amount = row.reward.amount || 0;
+                    rewardText = `${row.reward.label} - Rp ${amount.toLocaleString(
                       "id-ID",
                     )}`;
                   } else {
-                    rewardText = rewardObj.label;
+                    rewardText = row.reward.label;
                   }
                 }
+
+                const canProcess =
+                  row.status === "OPENED" && !!row.reward_id;
 
                 return (
                   <tr
@@ -474,7 +546,7 @@ export default function PanelHistoryPage() {
                     className="border-t border-slate-800/80 hover:bg-slate-900/60"
                   >
                     <td className="px-4 py-2 text-[11px]">
-                      {row.member?.[0]?.username || "-"}
+                      {row.member?.username || "-"}
                     </td>
                     <td className="px-2 py-2 text-center">
                       {row.credit_tier}
@@ -500,21 +572,27 @@ export default function PanelHistoryPage() {
                         : formatDateTime(row.expires_at)}
                     </td>
                     <td className="px-2 py-2 text-center">
-                      <button
-                        onClick={() => toggleProcessed(row)}
-                        disabled={processingId === row.id}
-                        className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${
-                          row.processed
-                            ? "border border-emerald-500/70 bg-emerald-900/40 text-emerald-200 hover:bg-emerald-800/50"
-                            : "border border-slate-600 bg-slate-900/80 text-slate-100 hover:bg-slate-800"
-                        } disabled:opacity-60 disabled:cursor-not-allowed`}
-                      >
-                        {processingId === row.id
-                          ? "..."
-                          : row.processed
-                          ? "Sudah diproses"
-                          : "Process"}
-                      </button>
+                      {canProcess ? (
+                        <button
+                          onClick={() => toggleProcessed(row)}
+                          disabled={processingId === row.id}
+                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${
+                            row.processed
+                              ? "border border-emerald-500/70 bg-emerald-900/40 text-emerald-200 hover:bg-emerald-800/50"
+                              : "border border-slate-600 bg-slate-900/80 text-slate-100 hover:bg-slate-800"
+                          } disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          {processingId === row.id
+                            ? "..."
+                            : row.processed
+                            ? "Sudah diproses"
+                            : "Process"}
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">
+                          -
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
