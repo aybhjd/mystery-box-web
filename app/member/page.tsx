@@ -32,6 +32,10 @@ type InventoryBox = {
   status: "PURCHASED" | "OPENED" | "EXPIRED";
   expires_at: string;
   created_at: string;
+  rarity?: {
+    code: string;
+    name: string;
+  } | null;
 };
 
 type OpenBoxResult = {
@@ -66,6 +70,28 @@ type OpenPopupState = {
   reward_type: string;
   reward_amount: number;
 };
+
+function rarityBadgeClasses(code?: string | null): string {
+  const c = code?.toUpperCase();
+  switch (c) {
+    case "COMMON":
+      return "border-emerald-500/60 bg-emerald-900/40 text-emerald-200";
+    case "RARE":
+      return "border-sky-400/70 bg-sky-900/50 text-sky-200";
+    case "EPIC":
+      return "border-violet-400/80 bg-violet-900/60 text-violet-200";
+    case "SUPREME":
+      return "border-amber-400/80 bg-amber-900/60 text-amber-200";
+    case "LEGENDARY":
+      return "border-orange-400/80 bg-orange-900/70 text-orange-200";
+    case "SPECIAL_LEGENDARY":
+    case "SLEGEND":
+    case "SLEGENDARY":
+      return "border-fuchsia-400/80 bg-gradient-to-r from-fuchsia-500/30 via-amber-400/30 to-sky-400/30 text-amber-50";
+    default:
+      return "border-slate-500/70 bg-slate-800/70 text-slate-100";
+  }
+}
 
 export default function MemberHomePage() {
   const router = useRouter();
@@ -167,7 +193,19 @@ export default function MemberHomePage() {
 
       const { data, error } = await supabase
         .from("box_transactions")
-        .select("id, credit_tier, status, expires_at, created_at")
+        .select(
+          `
+          id,
+          credit_tier,
+          status,
+          expires_at,
+          created_at,
+          rarity:box_rarities(
+            code,
+            name
+          )
+        `,
+        )
         .eq("member_profile_id", profile.id)
         .eq("status", "PURCHASED")
         .gt("expires_at", nowIso)
@@ -596,10 +634,19 @@ export default function MemberHomePage() {
                         : ""
                     }`}
                   >
-                    <div>
+                    <div className="space-y-1">
                       <p className="text-xs font-semibold text-slate-50">
                         Box {box.credit_tier} Credit
                       </p>
+                      {box.rarity && (
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${rarityBadgeClasses(
+                            box.rarity.code,
+                          )}`}
+                        >
+                          {box.rarity.name} ({box.rarity.code})
+                        </span>
+                      )}
                       <p className="text-[11px] text-slate-400">
                         Kadaluarsa:{" "}
                         <span className="font-medium text-slate-100">
