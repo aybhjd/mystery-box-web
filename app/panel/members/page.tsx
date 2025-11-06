@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
@@ -28,6 +28,13 @@ export default function PanelMembersPage() {
   );
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // State untuk modal topup
+  const [topupMember, setTopupMember] = useState<MemberRow | null>(null);
+  const [topupAmount, setTopupAmount] = useState("");
+  const [topupNote, setTopupNote] = useState("");
+  const [topupError, setTopupError] = useState<string | null>(null);
+  const [topupLoading, setTopupLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -120,6 +127,74 @@ export default function PanelMembersPage() {
     }
   }
 
+  function openTopupModal(member: MemberRow) {
+    setTopupMember(member);
+    setTopupAmount("");
+    setTopupNote("");
+    setTopupError(null);
+  }
+
+  function closeTopupModal() {
+    setTopupMember(null);
+    setTopupAmount("");
+    setTopupNote("");
+    setTopupError(null);
+    setTopupLoading(false);
+  }
+
+  async function handleTopupSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!topupMember) return;
+
+    setTopupError(null);
+
+    const amountInt = parseInt(topupAmount, 10);
+    if (!Number.isFinite(amountInt) || amountInt <= 0) {
+      setTopupError("Jumlah credit harus lebih besar dari 0.");
+      return;
+    }
+
+    setTopupLoading(true);
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc(
+        "perform_credit_topup",
+        {
+          p_member_id: topupMember.id,
+          p_amount: amountInt,
+          p_description: topupNote || null
+        }
+      );
+
+      if (rpcError) {
+        console.error(rpcError);
+        setTopupError(rpcError.message || "Gagal melakukan topup.");
+        setTopupLoading(false);
+        return;
+      }
+
+      const newBalance =
+        Array.isArray(data) && data.length > 0 && data[0].new_balance != null
+          ? (data[0].new_balance as number)
+          : topupMember.credit_balance + amountInt;
+
+      // Update state members
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.id === topupMember.id
+            ? { ...m, credit_balance: newBalance }
+            : m
+        )
+      );
+
+      closeTopupModal();
+    } catch (err) {
+      console.error(err);
+      setTopupError("Terjadi kesalahan tak terduga.");
+      setTopupLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen flex items-start justify-center px-4 py-10">
       <div className="w-full max-w-5xl space-y-6">
@@ -130,8 +205,7 @@ export default function PanelMembersPage() {
             </p>
             <h1 className="text-2xl font-semibold">Members</h1>
             <p className="text-sm text-slate-400">
-              Daftar member di tenant yang sama. Nanti di sini kita tambah
-              topup credit & detail riwayat.
+              Daftar member di tenant yang sama. Bisa topup credit dari Panel.
             </p>
           </div>
 
@@ -169,51 +243,4 @@ export default function PanelMembersPage() {
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-300">
                     Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-4 py-6 text-center text-slate-400"
-                    >
-                      Belum ada member di tenant ini.
-                    </td>
-                  </tr>
-                ) : (
-                  members.map((m) => (
-                    <tr
-                      key={m.id}
-                      className="border-t border-slate-800/80 hover:bg-slate-800/60"
-                    >
-                      <td className="px-4 py-3 align-middle">
-                        {m.username ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        {m.credit_balance} credit
-                      </td>
-                      <td className="px-4 py-3 align-middle text-slate-400">
-                        {formatDate(m.created_at)}
-                      </td>
-                      <td className="px-4 py-3 align-middle text-right">
-                        <button
-                          type="button"
-                          className="inline-flex items-center rounded-lg border border-emerald-500/60 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10 cursor-not-allowed opacity-60"
-                          title="Topup belum diaktifkan (next step)"
-                        >
-                          Topup (soon)
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                  </
