@@ -52,7 +52,7 @@ export default function PanelLedgerPage() {
 
   const [searchUsername, setSearchUsername] = useState("");
   const [kindFilter, setKindFilter] = useState<
-    "ALL" | "TOPUP" | "ADJUST_PLUS" | "ADJUST_MINUS" | "BOX_PURCHASE"
+    "ALL" | "TOPUP" | "ADJUST_PLUS" | "ADJUST_MINUS"
   >("ALL");
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export default function PanelLedgerPage() {
     loadProfile();
   }, [router]);
 
-  // ---------- load ledger untuk tenant ----------
+  // ---------- load ledger (hanya TOPUP / ADJUST) ----------
 
   useEffect(() => {
     async function loadRows() {
@@ -142,6 +142,7 @@ export default function PanelLedgerPage() {
           `,
           )
           .eq("tenant_id", profile.tenant_id)
+          .in("kind", ["TOPUP", "ADJUST_PLUS", "ADJUST_MINUS"])
           .order("created_at", { ascending: false })
           .limit(200);
 
@@ -193,11 +194,13 @@ export default function PanelLedgerPage() {
             : Promise.resolve({ data: [] as CreatorShort[], error: null }),
         ]);
 
-        if (memberErr || creatorErr) {
-          console.error(memberErr || creatorErr);
-          setRowsError("Gagal membaca data tambahan (member/admin).");
-          setLoadingRows(false);
-          return;
+        // Kalau lookup member/admin error, log saja tapi tetap lanjut;
+        // username / email akan tampil "-" di tabel.
+        if (memberErr) {
+          console.error("Ledger member lookup error:", memberErr);
+        }
+        if (creatorErr) {
+          console.error("Ledger creator lookup error:", creatorErr);
         }
 
         const memberMap = new Map(
@@ -272,7 +275,6 @@ export default function PanelLedgerPage() {
     if (kind === "TOPUP") return "Topup";
     if (kind === "ADJUST_PLUS") return "Adjust (+)";
     if (kind === "ADJUST_MINUS") return "Adjust (-)";
-    if (kind === "BOX_PURCHASE") return "Beli Box";
     return kind;
   }
 
@@ -280,7 +282,7 @@ export default function PanelLedgerPage() {
     if (kind === "TOPUP" || kind === "ADJUST_PLUS") {
       return "border-emerald-500/60 bg-emerald-950/50 text-emerald-200";
     }
-    if (kind === "BOX_PURCHASE" || kind === "ADJUST_MINUS") {
+    if (kind === "ADJUST_MINUS") {
       return "border-rose-500/60 bg-rose-950/50 text-rose-200";
     }
     return "border-slate-500/60 bg-slate-900/60 text-slate-200";
@@ -338,8 +340,8 @@ export default function PanelLedgerPage() {
             Ledger Credit Member
           </h1>
           <p className="text-xs text-slate-400">
-            Riwayat mutasi credit (topup, adjust, dan pembelian box) di tenant
-            ini.
+            Riwayat mutasi credit hasil topup dan penyesuaian (adjust) di
+            tenant ini. Pembelian box ada di menu History.
           </p>
         </div>
 
@@ -394,7 +396,6 @@ export default function PanelLedgerPage() {
               <option value="TOPUP">Topup</option>
               <option value="ADJUST_PLUS">Adjust (+)</option>
               <option value="ADJUST_MINUS">Adjust (-)</option>
-              <option value="BOX_PURCHASE">Beli Box</option>
             </select>
           </div>
         </div>
