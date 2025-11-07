@@ -136,7 +136,7 @@ type FXBaseProps = {
   variant?: "purchase" | "open";
 };
 
-function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 1800, variant = "purchase" }: FXBaseProps) {
+function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 2800, variant = "purchase" }: FXBaseProps) {
   // auto close
   useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
   // precompute particles
