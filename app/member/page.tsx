@@ -144,7 +144,7 @@ function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadg
   useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[99]">
+    <div className="fixed inset-0 z-[60]">
       <div className="absolute inset-0"
         style={{
           background:
@@ -322,7 +322,7 @@ export default function MemberHomePage() {
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
 
-    reloadInventory(profile.id);
+    await reloadInventory(profile.id);
   };
 
   // open
@@ -454,7 +454,7 @@ export default function MemberHomePage() {
             <div className="text-xs text-slate-300/80 text-right w-full">Login sebagai</div>
             <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40">
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
-              <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} token</span>
+              <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
             <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
                     className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
@@ -475,7 +475,7 @@ export default function MemberHomePage() {
                     {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                   </div>
 
-                  <div className="mt-2 text-lg font-semibold">Box {tier} Token</div>
+                  <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
                   <p className="text-xs text-slate-300 mt-1">
                     {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
                     {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
@@ -496,7 +496,7 @@ export default function MemberHomePage() {
                     className="mt-4 w-full rounded-full text-black font-semibold py-2"
                     style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}
                   >
-                    Beli Box {tier} Token
+                    Beli Box {tier} Credit
                   </button>
                 </div>
               </div>
@@ -532,7 +532,7 @@ export default function MemberHomePage() {
                   <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
-                        Box {box.credit_tier} Token
+                        Box {box.credit_tier} Credit
                         {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
                       </p>
                       <p className="text-[11px] text-slate-400">
@@ -569,10 +569,10 @@ export default function MemberHomePage() {
             <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
             {lastPurchase ? (
               <div className="text-xs text-slate-300">
-                Box {lastPurchase.credit_tier} token, rarity{" "}
+                Box {lastPurchase.credit_tier} credit, rarity{" "}
                 <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
                 <div className="mt-1 text-slate-400">
-                  Token sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
+                  Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
                   setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span>
                 </div>
                 <div className="text-slate-400">
@@ -597,7 +597,7 @@ export default function MemberHomePage() {
       </div>
 
       {/* MODALS: Drop Info */}
-      <Modal open={tierInfo.open} onClose={() => setTierInfo({open:false})} title={`Drop Info • Box ${tierInfo.tier ?? ""} Token`}>
+      <Modal open={tierInfo.open} onClose={() => setTierInfo({open:false})} title={`Drop Info • Box ${tierInfo.tier ?? ""} Credit`}>
         {tierInfo.loading ? (
           <div className="text-slate-400">Memuat…</div>
         ) : (!tierInfo.rows || tierInfo.rows.length === 0) ? (
@@ -641,7 +641,6 @@ export default function MemberHomePage() {
         rarityCode={fxPurchase?.code ?? ""}
         rarityName={fxPurchase?.name ?? ""}
         onClose={() => setFxPurchase(null)}
-        durationMs={2200}
       />
       <OpenRewardFX
         open={!!fxOpen}
@@ -651,7 +650,6 @@ export default function MemberHomePage() {
         rewardType={fxOpen?.reward_type ?? ""}
         rewardAmount={fxOpen?.reward_amount ?? null}
         onClose={() => setFxOpen(null)}
-        durationMs={2200}
       />
 
       {/* shimmer keyframes */}
