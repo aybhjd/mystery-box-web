@@ -454,7 +454,7 @@ export default function MemberHomePage() {
             <div className="text-xs text-slate-300/80 text-right w-full">Login sebagai</div>
             <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40">
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
-              <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
+              <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} token</span>
             </div>
             <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
                     className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
@@ -475,7 +475,7 @@ export default function MemberHomePage() {
                     {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                   </div>
 
-                  <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
+                  <div className="mt-2 text-lg font-semibold">Box {tier} Token</div>
                   <p className="text-xs text-slate-300 mt-1">
                     {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
                     {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
@@ -496,7 +496,7 @@ export default function MemberHomePage() {
                     className="mt-4 w-full rounded-full text-black font-semibold py-2"
                     style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}
                   >
-                    Beli Box {tier} Credit
+                    Beli Box {tier} Token
                   </button>
                 </div>
               </div>
@@ -569,10 +569,10 @@ export default function MemberHomePage() {
             <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
             {lastPurchase ? (
               <div className="text-xs text-slate-300">
-                Box {lastPurchase.credit_tier} credit, rarity{" "}
+                Box {lastPurchase.credit_tier} token, rarity{" "}
                 <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
                 <div className="mt-1 text-slate-400">
-                  Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
+                  Token sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
                   setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span>
                 </div>
                 <div className="text-slate-400">
