@@ -126,96 +126,147 @@ function Modal({ open, onClose, title, children, widthClass = "max-w-md" }: { op
 }
 
 /* =========================
-   DELUXE FX Overlays (mobile-friendly)
-   — efek: flash, shockwave, rays, sparks, confetti (saat OPEN), glints
+   DELUXE FX Overlays (mobile-friendly) — staged suspense
+   Tahapan:
+   0) NEUTRAL  → box biasa, background gelap, tanpa warna
+   1) TEASE    → aura tipis sesuai rarity, pulse pelan, sedikit spark
+   2) REVEAL   → full warna, shockwave, sparks banyak (+confetti untuk OPEN), judul & badge tampil
 ========================= */
 type FXBaseProps = {
   open: boolean; onClose: () => void;
   palette: { text: string; from: string; to: string; ring: string };
-  title: string; subtitle?: string; chestSrc: string; showBadge?: string; durationMs?: number;
+  title: string; subtitle?: string;
+  chestNeutralSrc: string;    // ex: closed
+  chestRevealSrc: string;     // ex: open (khusus OPEN) atau tetap closed (PURCHASE)
+  showBadge?: string;
   variant?: "purchase" | "open";
+  stagingDurations?: { neutral: number; tease: number; reveal: number }; // ms per fase
 };
 
-function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 2800, variant = "purchase" }: FXBaseProps) {
-  // auto close
-  useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
-  // precompute particles
+function FXOverlay({
+  open, onClose, palette, title, subtitle, chestNeutralSrc, chestRevealSrc, showBadge, variant = "purchase", stagingDurations
+}: FXBaseProps) {
+  const NEUTRAL_MS = stagingDurations?.neutral ?? (variant === "open" ? 650 : 520);
+  const TEASE_MS   = stagingDurations?.tease   ?? (variant === "open" ? 900 : 820);
+  const REVEAL_MS  = stagingDurations?.reveal  ?? (variant === "open" ? 950 : 720);
+
+  const [phase, setPhase] = useState<0 | 1 | 2>(0); // 0 neutral, 1 tease, 2 reveal
+
+  useEffect(() => {
+    if (!open) return;
+    setPhase(0);
+    const t0 = setTimeout(() => setPhase(1), NEUTRAL_MS);
+    const t1 = setTimeout(() => setPhase(2), NEUTRAL_MS + TEASE_MS);
+    const tC = setTimeout(onClose, NEUTRAL_MS + TEASE_MS + REVEAL_MS);
+    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(tC); };
+  }, [open, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
+
+  const isNeutral = phase === 0;
+  const isTease = phase === 1;
+  const isReveal = phase === 2;
+
+  // particles berdasarkan phase (sedikit → banyak)
   const sparks = useMemo(() => {
     if (!open) return [] as { tx: number; ty: number; delay: number; dur: number; size: number }[];
+    const count = isNeutral ? 0 : isTease ? 10 : variant === "open" ? 34 : 22;
     const arr: { tx: number; ty: number; delay: number; dur: number; size: number }[] = [];
-    const count = variant === "open" ? 34 : 22;
     for (let i = 0; i < count; i++) {
       const angle = rnd(0, Math.PI * 2);
-      const dist = rnd(80, 200); // px
-      arr.push({ tx: Math.cos(angle) * dist, ty: Math.sin(angle) * dist, delay: Math.floor(rnd(0, 120)), dur: Math.floor(rnd(520, 900)), size: rnd(2, 4) });
+      const dist = rnd(isTease ? 60 : 80, isTease ? 140 : 200);
+      arr.push({ tx: Math.cos(angle) * dist, ty: Math.sin(angle) * dist, delay: Math.floor(rnd(0, 140)), dur: Math.floor(rnd(520, 900)), size: rnd(2, 4) });
     }
     return arr;
-  }, [open, variant]);
+  }, [open, isNeutral, isTease, variant]);
 
   const confetti = useMemo(() => {
-    if (!open || variant !== "open") return [] as { x: number; rot: number; delay: number; dur: number; w: number; h: number }[];
+    if (!open || !isReveal || variant !== "open") return [] as { x: number; rot: number; delay: number; dur: number; w: number; h: number }[];
     const arr: { x: number; rot: number; delay: number; dur: number; w: number; h: number }[] = [];
     for (let i = 0; i < 26; i++) {
       arr.push({ x: rnd(-140, 140), rot: rnd(-120, 120), delay: Math.floor(rnd(0, 120)), dur: Math.floor(rnd(700, 1100)), w: rnd(4, 8), h: rnd(8, 16) });
     }
     return arr;
-  }, [open, variant]);
+  }, [open, isReveal, variant]);
 
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-[75] overflow-hidden">
-      {/* quick white flash */}
-      <div className="absolute inset-0 pointer-events-none mix-blend-screen bg-white/80 animate-fx-flash" />
+      {/* flash hanya ketika transisi ke reveal */}
+      {isReveal && <div className="absolute inset-0 pointer-events-none mix-blend-screen bg-white/80 animate-fx-flash" />}
 
-      {/* tinted dark background + radial glow */}
+      {/* background tint bertahap */}
       <div className="absolute inset-0"
         style={{
-          background:
-            `linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.92)), radial-gradient(900px 500px at 50% 45%, ${palette.from}, ${palette.to} 70%)`
+          background: isNeutral
+            ? `linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.92))`
+            : isTease
+            ? `linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.92)), radial-gradient(700px 380px at 50% 48%, ${palette.from}44, transparent 70%)`
+            : `linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.92)), radial-gradient(900px 500px at 50% 45%, ${palette.from}, ${palette.to} 70%)`
         }}
       />
 
-      {/* rotating rays */}
+      {/* rotating rays muncul di reveal (tease: samar) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[120vmin] h-[120vmin] rounded-full opacity-20 blur-sm animate-fx-rays"
-             style={{ backgroundImage: `repeating-conic-gradient(from 0deg, ${palette.ring} 0deg 3deg, transparent 3deg 12deg)` }} />
+        <div
+          className={`w-[120vmin] h-[120vmin] rounded-full blur-sm ${isNeutral ? 'opacity-0' : isTease ? 'opacity-8 animate-fx-rays-slow' : 'opacity-20 animate-fx-rays'}`}
+          style={{ backgroundImage: `repeating-conic-gradient(from 0deg, ${palette.ring} 0deg 3deg, transparent 3deg 12deg)` }}
+        />
       </div>
 
-      {/* shockwave triple rings */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[58vmin] h-[58vmin] rounded-full border-2 border-white/35 shadow-[0_0_120px_20px_rgba(255,255,255,.15)] animate-fx-wave" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[42vmin] h-[42vmin] rounded-full border-2 border-[${palette.ring}]/70 animate-fx-wave-del2" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[70vmin] h-[70vmin] rounded-full border border-white/20 animate-fx-wave-del3" />
-      </div>
-
-      {/* core chest */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <img src={chestSrc} alt="" className="w-[40vmin] max-w-[440px] animate-fx-pop will-change-transform drop-shadow-[0_0_40px_rgba(255,255,255,.35)]" />
-      </div>
-
-      {/* title & subtitle & badge */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="mt-[30vmin] px-6 py-4 rounded-2xl text-center">
-          <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-fx-pop" style={{ color: palette.text }}>
-            {title}
+      {/* shockwave hanya di reveal */}
+      {isReveal && (
+        <>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-[58vmin] h-[58vmin] rounded-full border-2 border-white/35 shadow-[0_0_120px_20px_rgba(255,255,255,.15)] animate-fx-wave" />
           </div>
-          {subtitle && <div className="mt-1 text-base md:text-lg text-slate-200/90 animate-fx-pop-delayed">{subtitle}</div>}
-          {showBadge && (
-            <div className="mt-2 flex items-center justify-center animate-fx-pop-delayed">
-              <img src={showBadge} alt="badge" className="h-8 opacity-95 drop-shadow-[0_0_12px_rgba(255,255,255,.5)]" />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-[42vmin] h-[42vmin] rounded-full border-2 border-[${'${palette.ring}'}]/70 animate-fx-wave-del2" />
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-[70vmin] h-[70vmin] rounded-full border border-white/20 animate-fx-wave-del3" />
+          </div>
+        </>
+      )}
+
+      {/* chest: neutral → glow (pulse) → reveal (bisa open) */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className={`relative ${isTease ? 'animate-fx-pulse' : ''}`}>
+          <img
+            src={isReveal ? chestRevealSrc : chestNeutralSrc}
+            alt=""
+            className={`w-[40vmin] max-w-[440px] will-change-transform ${isReveal ? 'animate-fx-pop' : isTease ? 'opacity-95' : 'opacity-100'}`}
+          />
+          {/* aura ring tipis saat tease */}
+          {isTease && (
+            <div className="absolute inset-0 -z-10 flex items-center justify-center pointer-events-none">
+              <div className="w-[52vmin] h-[52vmin] rounded-full opacity-50 blur-lg"
+                   style={{ background: `radial-gradient(circle, ${palette.ring}33 0%, transparent 60%)` }} />
             </div>
           )}
         </div>
       </div>
 
-      {/* glints */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[60vmin] h-[60vmin] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.18)_0%,rgba(255,255,255,0)_60%)] animate-fx-glint" />
-      </div>
+      {/* teks & badge hanya pada reveal */}
+      {isReveal && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="mt-[30vmin] px-6 py-4 rounded-2xl text-center">
+            <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-fx-pop" style={{ color: palette.text }}>{title}</div>
+            {subtitle && <div className="mt-1 text-base md:text-lg text-slate-200/90 animate-fx-pop-delayed">{subtitle}</div>}
+            {showBadge && (
+              <div className="mt-2 flex items-center justify-center animate-fx-pop-delayed">
+                <img src={showBadge} alt="badge" className="h-8 opacity-95 drop-shadow-[0_0_12px_rgba(255,255,255,.5)]" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* glints: lembut di tease, kuat di reveal */}
+      {!isNeutral && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className={`w-[60vmin] h-[60vmin] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.18)_0%,rgba(255,255,255,0)_60%)] ${isTease ? 'animate-fx-glint-soft' : 'animate-fx-glint'}`} />
+        </div>
+      )}
 
       {/* sparks */}
       <div className="absolute inset-0 pointer-events-none">
@@ -224,26 +275,27 @@ function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadg
             className="absolute left-1/2 top-1/2 block rounded-full opacity-0 will-change-transform"
             style={{
               width: `var(--sz)`, height: `var(--sz)`,
-              // @ts-ignore - CSS vars via style
-              ["--tx" as any]: `${s.tx}px`, ["--ty" as any]: `${s.ty}px`, ["--sz" as any]: `${s.size}px`,
-              ["--dur" as any]: `${s.dur}ms`, ["--delay" as any]: `${s.delay}ms`,
-              background: `radial-gradient(circle, #fff 0%, ${palette.ring} 60%, transparent 70%)`,
+              // @ts-ignore
+              ["--tx" as any]: `${'${s.tx}'}px`, ["--ty" as any]: `${'${s.ty}'}px`, ["--sz" as any]: `${'${s.size}'}px`,
+              ["--dur" as any]: `${'${s.dur}'}ms`, ["--delay" as any]: `${'${s.delay}'}ms`,
+              background: `radial-gradient(circle, #fff 0%, ${'${palette.ring}'} 60%, transparent 70%)`,
               boxShadow: "0 0 10px rgba(255,255,255,.25)",
               animation: "fx-spark var(--dur) ease-out var(--delay) both"
-            }}/>
+            }}
+          />
         ))}
       </div>
 
-      {/* confetti (open only) */}
-      {variant === "open" && (
+      {/* confetti hanya reveal OPEN */}
+      {isReveal && variant === "open" && (
         <div className="absolute inset-0 pointer-events-none">
           {confetti.map((c, i) => (
             <span key={i}
               className="absolute left-1/2 top-1/2 block origin-center opacity-0 will-change-transform"
               style={{
-                // @ts-ignore vars
-                ["--x" as any]: `${c.x}px`, ["--rot" as any]: `${c.rot}deg`, ["--dur" as any]: `${c.dur}ms`, ["--delay" as any]: `${c.delay}ms`,
-                width: `${c.w}px`, height: `${c.h}px`,
+                // @ts-ignore
+                ["--x" as any]: `${'${c.x}'}px`, ["--rot" as any]: `${'${c.rot}'}deg`, ["--dur" as any]: `${'${c.dur}'}ms`, ["--delay" as any]: `${'${c.delay}'}ms`,
+                width: `${'${c.w}'}px`, height: `${'${c.h}'}px`,
                 background: i % 5 === 0 ? "#fde047" : i % 5 === 1 ? "#60a5fa" : i % 5 === 2 ? "#34d399" : i % 5 === 3 ? "#f472b6" : "#f97316",
                 borderRadius: "2px",
                 animation: "fx-confetti var(--dur) cubic-bezier(.2,.7,0,1) var(--delay) both",
@@ -266,6 +318,7 @@ function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadg
 
         @keyframes fx-rays-spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
         .animate-fx-rays{animation:fx-rays-spin 1.8s linear both}
+        .animate-fx-rays-slow{animation:fx-rays-spin 4s linear both}
 
         @keyframes fx-wave { 0%{transform:scale(.6);opacity:.0;filter:blur(6px)} 30%{opacity:.7} 100%{transform:scale(1.35);opacity:0;filter:blur(10px)} }
         .animate-fx-wave{animation:fx-wave 1.1s ease-out both}
@@ -274,14 +327,15 @@ function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadg
 
         @keyframes fx-glint { 0%{transform:scale(.9);opacity:.0} 40%{opacity:.5} 100%{transform:scale(1.1);opacity:0} }
         .animate-fx-glint{animation:fx-glint 1.2s ease-out .05s both}
+        @keyframes fx-glint-soft { 0%{transform:scale(.96);opacity:.0} 40%{opacity:.35} 100%{transform:scale(1.04);opacity:0} }
+        .animate-fx-glint-soft{animation:fx-glint-soft 1s ease-out .05s both}
+
+        @keyframes fx-pulse { 0%{ transform: scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,.0)) } 50%{ transform: scale(1.02); filter: drop-shadow(0 0 18px rgba(255,255,255,.25)) } 100%{ transform: scale(1) filter: drop-shadow(0 0 0 rgba(255,255,255,.0)) } }
+        .animate-fx-pulse{ animation: fx-pulse 860ms ease-in-out infinite }
 
         @keyframes fx-spark { 0%{transform:translate(0,0) scale(.5);opacity:0} 12%{opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0} }
 
-        @keyframes fx-confetti {
-          0%{ transform:translateX(calc(var(--x))) translateY(-20px) rotate(0deg); opacity:0 }
-          10%{ opacity:1 }
-          100%{ transform:translateX(calc(var(--x) * 1.2)) translateY(260px) rotate(var(--rot)); opacity:0 }
-        }
+        @keyframes fx-confetti { 0%{ transform:translateX(calc(var(--x))) translateY(-20px) rotate(0deg); opacity:0 } 10%{ opacity:1 } 100%{ transform:translateX(calc(var(--x) * 1.2)) translateY(260px) rotate(var(--rot)); opacity:0 } }
       `}</style>
     </div>
   );
@@ -293,7 +347,9 @@ function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{ open:boole
     <FXOverlay
       open={open} onClose={onClose} palette={pal}
       title={rarityName.toUpperCase()} subtitle="Rarity Ditemukan!"
-      chestSrc="/fantasy/chest/chest_closed.svg" showBadge={badgeSrcFromCode(rarityCode)} variant="purchase"
+      chestNeutralSrc="/fantasy/chest/chest_closed.svg"
+      chestRevealSrc="/fantasy/chest/chest_closed.svg"
+      showBadge={badgeSrcFromCode(rarityCode)} variant="purchase"
     />
   );
 }
@@ -304,7 +360,9 @@ function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, r
     <FXOverlay
       open={open} onClose={onClose} palette={pal}
       title={rewardLabel} subtitle={`Hadiah • ${rarityName} • ${value}`}
-      chestSrc="/fantasy/chest/chest_open.svg" showBadge={badgeSrcFromCode(rarityCode)} variant="open"
+      chestNeutralSrc="/fantasy/chest/chest_closed.svg"
+      chestRevealSrc="/fantasy/chest/chest_open.svg"
+      showBadge={badgeSrcFromCode(rarityCode)} variant="open"
     />
   );
 }
