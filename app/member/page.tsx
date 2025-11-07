@@ -326,10 +326,64 @@ function AuroraLayer() {
   );
 }
 
+function Modal({
+  open, onClose, title, children, widthClass = "max-w-md"
+}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; widthClass?: string; }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className={`relative w-full ${widthClass} mx-4 rounded-2xl border border-slate-700/70 bg-slate-950/90 backdrop-blur p-4`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold text-slate-200">{title}</div>
+          <button onClick={onClose} className="text-xs px-2 py-1 rounded-md border border-slate-600/60 hover:bg-slate-800/60">
+            Tutup
+          </button>
+        </div>
+        <div className="text-sm text-slate-300">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /* =========================
    Page
 ========================= */
 export default function MemberHomePage() {
+  const [tierInfo, setTierInfo] = useState<{open:boolean; tier?: number; rows?: Array<{ code:string; name:string; color_key:string; prob:number; sort?:number }>}>({open:false});
+  const [rarityInfo, setRarityInfo] = useState<{open:boolean; rarityId?:string; title?:string; rows?: Array<{ label:string; display:string; prob:number }>}>({open:false});
+
+  const loadTierInfo = async (tier: number) => {
+    const { data, error } = await supabase
+      .from("box_credit_rarity_probs")
+      .select("rarity_id, gimmick_probability, is_active, credit_tier")
+      .eq("credit_tier", tier)
+      .eq("is_active", true);
+    if (error) { setTierInfo({open:true, tier, rows:[]}); return; }
+    const rows = (data ?? []).map(r => {
+      const rar = rarityMap[r.rarity_id] || { code:"?", name:"?", color_key:"", sort_order:999 };
+      return { code: rar.code, name: rar.name, color_key: rar.color_key, prob: (r as any).gimmick_probability ?? 0, sort: rar.sort_order };
+    });
+    // urut dari langka → umum (sort_order makin besar = makin umum di datamu)
+    rows.sort((a,b) => (a.sort ?? 0) - (b.sort ?? 0));
+    setTierInfo({ open:true, tier, rows });
+  };
+
+  const loadRarityInfo = async (rarityId: string) => {
+    const rar = rarityMap[rarityId];
+    const { data, error } = await supabase
+      .from("box_rewards")
+      .select("label, reward_type, amount, gimmick_probability, is_active")
+      .eq("rarity_id", rarityId)
+      .eq("is_active", true);
+    if (error) { setRarityInfo({open:true, rows:[], title: rar ? `Drop ${rar.name}` : "Drop Reward"}); return; }
+    const rows = (data ?? []).map(r => ({
+      label: r.label,
+      display: r.reward_type === "CASH" && r.amount != null ? `${r.label} (Rp ${new Intl.NumberFormat('id-ID').format(Number(r.amount))})` : r.label,
+      prob: (r as any).gimmick_probability ?? 0,
+    })).sort((a,b) => b.prob - a.prob);
+    setRarityInfo({ open:true, rarityId, title: rar ? `Drop ${rar.name}` : "Drop Reward", rows });
+  };
   const router = useRouter();
 
   const [profile, setProfile] = useState<MemberProfile | null>(null);
@@ -396,10 +450,14 @@ export default function MemberHomePage() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data, error } = await supabase.from("box_rarities").select("id, code, name, color_key");
+      const { data, error } = await supabase
+        .from("box_rarities")
+        .select("id, code, name, color_key, sort_order");
       if (!error && data && alive) {
-        const map = Object.fromEntries(data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key }]));
-        setRarityMap(map);
+        const map = Object.fromEntries(
+          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key, sort_order: r.sort_order }])
+        );
+        setRarityMap(map as any);
       }
     })();
     return () => { alive = false; };
@@ -516,10 +574,13 @@ export default function MemberHomePage() {
       ribbon: "from-violet-400/80 to-cyan-300/70"
     },
     2: {
-      frameFrom: "#fb7185AA", frameTo: "#f97316AA",     // bingkai gradient merah→oranye lembut
-      btnFrom: "#ef4444", btnTo: "#fb7185",             // tombol merah→rose
-      glow: "shadow-[0_10px_32px_-8px_rgba(239,68,68,.35)]",
-      ribbon: "from-rose-300/90 to-amber-300/80",        // ribbon gradasi rose→amber
+      // frame gradasi crimson → magenta (beda banget dari oranye Tier 3)
+      frameFrom: "#f43f5eAA", frameTo: "#ec4899AA",
+      // tombol merah → magenta
+      btnFrom: "#f43f5e", btnTo: "#ec4899",
+      glow: "shadow-[0_10px_32px_-8px_rgba(236,72,153,.35)]",
+      // ribbon rose → fuchsia (bukan amber)
+      ribbon: "from-rose-300/90 to-fuchsia-300/85",
     },
     3: {
       frameFrom: "#f97316AA", frameTo: "#f59e0b88",
@@ -589,6 +650,7 @@ export default function MemberHomePage() {
                       {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                     </div>
 
+                    <img src="/fantasy/chest/chest_glow.svg" alt="" className="absolute -top-6 -left-6 w-16 opacity-30 pointer-events-none" />
                     <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
                     <p className="text-xs text-slate-400 mt-1">
                       {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
@@ -604,6 +666,15 @@ export default function MemberHomePage() {
                       }}
                     >
                       Beli Box {tier} Credit
+                    </button>
+                    {/* Ikon box – klik untuk lihat Drop Info tier */}
+                    <button
+                      type="button"
+                      onClick={() => loadTierInfo(tier)}
+                      className="absolute right-3 -bottom-4 md:right-4 md:bottom-4 rounded-xl bg-slate-950/70 border border-slate-700/60 p-2 hover:bg-slate-900/80"
+                      aria-label="Lihat Drop Info"
+                    >
+                      <img src="/fantasy/chest/chest_closed.svg" alt="" className="w-12 md:w-14 drop-shadow-[0_6px_18px_rgba(0,0,0,.45)]" />
                     </button>
                   </div>
                 </div>
@@ -646,6 +717,14 @@ export default function MemberHomePage() {
                           Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span>
                         </p>
                       </div>
+                      {box.rarity_id && (
+                        <button
+                          onClick={() => loadRarityInfo(box.rarity_id!)}
+                          className="mr-2 rounded-full border border-slate-600/60 px-3 py-1 text-[11px] hover:bg-slate-800/50"
+                        >
+                          Info
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenBox(box)}
                         disabled={openingId === box.id}
@@ -693,6 +772,42 @@ export default function MemberHomePage() {
           )}
         </div>
       </div>
+
+      {/* POPUP: Drop Info by Tier */}
+      <Modal open={tierInfo.open} onClose={() => setTierInfo({open:false})} title={`Drop Info • Box ${tierInfo.tier ?? ""} Credit`}>
+        {(!tierInfo.rows || tierInfo.rows.length === 0) ? (
+          <div className="text-slate-400 text-sm">Belum ada data.</div>
+        ) : (
+          <ul className="space-y-2">
+            {tierInfo.rows.map((r, idx) => (
+              <li key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={rarityBadgeClasses(r.color_key)}>{r.name}</span>
+                </div>
+                <div className="font-semibold">{r.prob}%</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-3 text-[11px] text-slate-500">* Angka ini untuk tampilan (gimmick). RNG asli menggunakan real_probability.</div>
+      </Modal>
+
+      {/* POPUP: Drop Info by Rarity (inventory) */}
+      <Modal open={rarityInfo.open} onClose={() => setRarityInfo({open:false})} title={rarityInfo.title ?? "Drop Reward"}>
+        {(!rarityInfo.rows || rarityInfo.rows.length === 0) ? (
+          <div className="text-slate-400 text-sm">Belum ada data.</div>
+        ) : (
+          <ul className="space-y-2">
+            {rarityInfo.rows.map((r, idx) => (
+              <li key={idx} className="flex items-center justify-between">
+                <div>{r.display}</div>
+                <div className="font-semibold">{r.prob}%</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-3 text-[11px] text-slate-500">* Angka ini untuk tampilan (gimmick). RNG asli menggunakan real_probability.</div>
+      </Modal>
 
       {/* FX Overlays */}
       <PurchaseRarityFX
