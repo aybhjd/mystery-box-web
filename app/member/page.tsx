@@ -575,10 +575,10 @@ export default function MemberHomePage() {
       style={{ backgroundImage: "url('/fantasy/bg.jpg')", backgroundSize: "cover", backgroundPosition: "center" }}
     >
       {/* overlay dipisah supaya bg.jpg terlihat & ringan */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.35), rgba(7,11,19,.60))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-start">
           <div>
             <div className="text-[10px] tracking-[0.28em] uppercase text-slate-300/80">MEMBER SITE</div>
             <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
@@ -587,13 +587,13 @@ export default function MemberHomePage() {
             <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
             <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent" />
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="text-xs text-slate-300/80 text-right w-full">Login sebagai</div>
-            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40">
-              <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
+          <div className="flex flex-col gap-2 md:items-end items-start">
+            <div className="text-xs text-slate-300/80">Login sebagai</div>
+            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40 w-full md:w-auto">
+              <span className="text-emerald-300 font-semibold break-all">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
-            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
+            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50 self-stretch md:self-auto">Logout</button>
           </div>
         </div>
 
@@ -610,22 +610,23 @@ export default function MemberHomePage() {
                   </div>
 
                   <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
-                  <p className="text-xs text-slate-300 mt-1">
-                    {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
-                    {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
-                    {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
-                  </p>
 
                   {/* Ikon BOX (center) – klik untuk Drop Info tier */}
                   <div className="mt-4 flex justify-center">
                     <button type="button" aria-label="Lihat Drop Info" onClick={() => loadTierInfo(tier)} className="rounded-2xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 hover:bg-slate-800/80">
-                      <img src="/fantasy/chest/chest_closed.svg" alt="" className="h-14 md:h-16 will-change-transform" />
+                      <img src="/fantasy/chest/chest_closed.svg" alt="" className="h-20 md:h-24 will-change-transform" />
                     </button>
                   </div>
 
                   <button onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }} className="mt-4 w-full rounded-full text-black font-semibold py-2" style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}>
                     Beli Box {tier} Credit
                   </button>
+                  {/* Info dipindah ke bawah tombol */}
+                  <p className="mt-2 text-xs text-slate-300">
+                    {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
+                    {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
+                    {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
+                  </p>
                 </div>
               </div>
             );
