@@ -538,7 +538,7 @@ export default function MemberHomePage() {
           {/* Header */}
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-[10px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
+              <div className="text-[8px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
 
               <h1
                 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent
