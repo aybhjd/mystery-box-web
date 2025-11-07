@@ -50,6 +50,172 @@ type OpenBoxResult = {
 
 type OpenedBoxInfo = OpenBoxResult & { credit_tier: number };
 
+// ==== Fantasy FX (Starter Pack, no assets) ==================================
+
+type RarityKey =
+  | "COMMON"
+  | "RARE"
+  | "EPIC"
+  | "SUPREME"
+  | "LEGENDARY"
+  | "SPECIAL_LEGENDARY";
+
+const rarityPalette: Record<RarityKey, {
+  text: string;
+  from: string; // radial center
+  to: string;   // radial edge
+  ring: string; // ring accent
+}> = {
+  COMMON:           { text: "#d9f99d", from: "#245a2c", to: "#0b2a17", ring: "#52d787" },
+  RARE:             { text: "#cfe8ff", from: "#0f3a7a", to: "#081a3a", ring: "#56ccf2" },
+  EPIC:             { text: "#f5d0fe", from: "#4a1460", to: "#1a0b2a", ring: "#c471ed" },
+  SUPREME:          { text: "#fff1b8", from: "#6a5210", to: "#2a2108", ring: "#f7d774" },
+  LEGENDARY:        { text: "#fff6cc", from: "#6b4a00", to: "#2a1b00", ring: "#f9d976" },
+  SPECIAL_LEGENDARY:{ text: "#ffffff", from: "#2a0b2a", to: "#0b0b2a", ring: "#ffffff" },
+};
+
+function toRarity(key: string): RarityKey {
+  const k = (key || "").toUpperCase() as RarityKey;
+  return (["COMMON","RARE","EPIC","SUPREME","LEGENDARY","SPECIAL_LEGENDARY"] as string[]).includes(k)
+    ? (k as RarityKey)
+    : "COMMON";
+}
+
+function formatIDR(n?: number | null) {
+  if (n == null) return "—";
+  try {
+    return new Intl.NumberFormat("id-ID").format(n);
+  } catch { return String(n); }
+}
+
+// --- Overlay base ---
+type FXBaseProps = {
+  open: boolean;
+  onClose: () => void;
+  palette: ReturnType<typeof toRarity> extends never ? never : { text: string; from: string; to: string; ring: string };
+  title: string;
+  subtitle?: string;
+  rainbowRing?: boolean;
+  durationMs?: number;
+};
+
+function FXOverlay({
+  open, onClose, palette, title, subtitle, rainbowRing=false, durationMs=1600
+}: FXBaseProps) {
+  // auto close
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(onClose, durationMs);
+    return () => clearTimeout(t);
+  }, [open, onClose, durationMs]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] pointer-events-none">
+      {/* backdrop glow */}
+      <div
+        className="absolute inset-0 animate-fx-fade"
+        style={{
+          background:
+            `radial-gradient(1200px 600px at 50% 45%, ${palette.from}, ${palette.to} 70%, rgba(0,0,0,0.96) 100%)`,
+        }}
+      />
+      {/* swirling ring */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="w-[68vmin] h-[68vmin] rounded-full blur-[2px] opacity-90 animate-fx-rotate-slow"
+          style={{
+            background: rainbowRing
+              ? "conic-gradient(from 0deg, #ff005e, #ff9a00, #f7f700, #00e91d, #00e5ff, #7a5cff, #ff00e7, #ff005e)"
+              : `conic-gradient(from 0deg, transparent 30%, ${palette.ring}, transparent 70%)`,
+            maskImage: "radial-gradient(circle, transparent 60%, black 60%)",
+          }}
+        />
+      </div>
+      {/* burst */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-[22vmin] h-[22vmin] rounded-full bg-white/30 blur-[30px] animate-fx-burst" />
+      </div>
+      {/* title */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="px-6 py-4 rounded-2xl text-center">
+          <div
+            className="text-4xl md:text-5xl font-extrabold tracking-wide drop-shadow-[0_0_12px_rgba(255,255,255,.35)] animate-fx-pop"
+            style={{ color: palette.text }}
+          >
+            {title}
+          </div>
+          {subtitle && (
+            <div className="mt-1 text-base md:text-lg text-slate-200/90 animate-fx-pop-delayed">
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* inline keyframes so tailwind config tak perlu diubah */}
+      <style jsx global>{`
+        @keyframes fx-fade { 0%{opacity:0} 12%{opacity:1} 88%{opacity:1} 100%{opacity:0} }
+        @keyframes fx-burst { 0%{transform:scale(.35);opacity:.0} 40%{opacity:.75} 100%{transform:scale(1.35);opacity:0} }
+        @keyframes fx-rotate-slow { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+        @keyframes fx-pop { 0%{transform:translateY(8px) scale(.98);opacity:0}
+                             40%{opacity:1}
+                             100%{transform:translateY(0) scale(1);opacity:1} }
+        @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0}
+                                    50%{opacity:1}
+                                    100%{transform:translateY(0);opacity:1} }
+        .animate-fx-fade{animation:fx-fade 1.6s ease both}
+        .animate-fx-burst{animation:fx-burst 1.2s ease-out both}
+        .animate-fx-rotate-slow{animation:fx-rotate-slow 6s linear infinite}
+        .animate-fx-pop{animation:fx-pop .6s ease both}
+        .animate-fx-pop-delayed{animation:fx-pop-delayed .9s ease .15s both}
+      `}</style>
+    </div>
+  );
+}
+
+// --- Specific overlays ---
+function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{
+  open: boolean; rarityCode: string; rarityName: string; onClose: () => void;
+}) {
+  const pal = rarityPalette[toRarity(rarityCode)];
+  const isRainbow = toRarity(rarityCode) === "SPECIAL_LEGENDARY";
+  return (
+    <FXOverlay
+      open={open}
+      onClose={onClose}
+      palette={pal}
+      rainbowRing={isRainbow}
+      title={rarityName.toUpperCase()}
+      subtitle="Rarity Ditemukan!"
+      durationMs={1600}
+    />
+  );
+}
+
+function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose }:{
+  open: boolean; rarityCode: string; rarityName: string;
+  rewardLabel: string; rewardType: string; rewardAmount: number | null;
+  onClose: () => void;
+}) {
+  const pal = rarityPalette[toRarity(rarityCode)];
+  const value = rewardType === "CASH" ? `+${formatIDR(rewardAmount)} saldo` : rewardLabel;
+  const isRainbow = toRarity(rarityCode) === "SPECIAL_LEGENDARY";
+  return (
+    <FXOverlay
+      open={open}
+      onClose={onClose}
+      palette={pal}
+      rainbowRing={isRainbow}
+      title={rewardLabel}
+      subtitle={`Hadiah • ${rarityName} • ${value}`}
+      durationMs={1700}
+    />
+  );
+}
+// ==== End Fantasy FX =========================================================
+
 export default function MemberHomePage() {
   const router = useRouter();
 
@@ -61,6 +227,12 @@ export default function MemberHomePage() {
   const [lastPurchase, setLastPurchase] = useState<PurchaseResult | null>(
     null,
   );
+
+  // FX states (starter pack)
+  const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
+  const [fxOpen, setFxOpen] = useState<{
+    rarity_code: string; rarity_name: string; reward_label: string; reward_type: string; reward_amount: number | null;
+  } | null>(null);
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [infoType, setInfoType] = useState<"success" | "error" | null>(
@@ -229,6 +401,9 @@ export default function MemberHomePage() {
 
       const result = data[0] as PurchaseResult;
 
+      // trigger rarity reveal FX
+      setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
+
       // update saldo di UI
       setProfile((prev) =>
         prev
@@ -291,6 +466,15 @@ export default function MemberHomePage() {
       }
 
       const result = data[0] as OpenBoxResult;
+
+      // trigger reward reveal FX
+      setFxOpen({
+        rarity_code: result.rarity_code,
+        rarity_name: result.rarity_name,
+        reward_label: result.reward_label,
+        reward_type: result.reward_type,
+        reward_amount: result.reward_amount ?? null,
+      });
 
       // update inventory (remove box yang baru dibuka)
       setInventory((prev) => prev.filter((b) => b.id !== box.id));
@@ -615,6 +799,23 @@ export default function MemberHomePage() {
           </section>
         )}
       </div>
+      {/* === Fantasy FX Overlays (Starter Pack) === */}
+      <PurchaseRarityFX
+        open={!!fxPurchase}
+        rarityCode={fxPurchase?.code ?? ""}
+        rarityName={fxPurchase?.name ?? ""}
+        onClose={() => setFxPurchase(null)}
+      />
+
+      <OpenRewardFX
+        open={!!fxOpen}
+        rarityCode={fxOpen?.rarity_code ?? ""}
+        rarityName={fxOpen?.rarity_name ?? ""}
+        rewardLabel={fxOpen?.reward_label ?? ""}
+        rewardType={fxOpen?.reward_type ?? ""}
+        rewardAmount={fxOpen?.reward_amount ?? null}
+        onClose={() => setFxOpen(null)}
+      />
     </main>
   );
 }
