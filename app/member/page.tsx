@@ -296,15 +296,32 @@ function OpenRewardFX({
 function AuroraLayer() {
   return (
     <div className="absolute inset-0 z-0 pointer-events-none">
-      {/* aurora blobs */}
-      <div className="absolute -top-28 -left-32 w-[52rem] h-[52rem] rounded-full blur-[140px] opacity-50"
-           style={{ background: "radial-gradient(closest-side, #7c3aed66, transparent 70%)" }} />
-      <div className="absolute -top-24 right-[-8rem] w-[46rem] h-[46rem] rounded-full blur-[140px] opacity-45"
-           style={{ background: "radial-gradient(closest-side, #22d3ee55, transparent 70%)" }} />
-      <div className="absolute bottom-[-12rem] left-1/3 w-[56rem] h-[56rem] rounded-full blur-[150px] opacity-40"
-           style={{ background: "radial-gradient(closest-side, #f59e0b55, transparent 70%)" }} />
-      {/* faint star grid */}
-      <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_1px)] [background-size:24px_24px]" />
+      {/* Grid bintang (di paling bawah) */}
+      <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_1px)] [background-size:24px_24px]" />
+
+      {/* Aurora blobs — lebih besar & terang */}
+      <div
+        className="absolute -top-40 -left-48 w-[70rem] h-[70rem] rounded-full blur-[180px] opacity-80"
+        style={{ background: "radial-gradient(closest-side, #8b5cf2aa, transparent 70%)" }}
+      />
+      <div
+        className="absolute -top-32 right-[-10rem] w-[64rem] h-[64rem] rounded-full blur-[180px] opacity-70"
+        style={{ background: "radial-gradient(closest-side, #22d3eeaa, transparent 70%)" }}
+      />
+      <div
+        className="absolute bottom-[-14rem] left-1/3 w-[72rem] h-[72rem] rounded-full blur-[200px] opacity-65"
+        style={{ background: "radial-gradient(closest-side, #f59e0baa, transparent 70%)" }}
+      />
+
+      {/* Sapu vertikal halus */}
+      <div
+        className="absolute inset-x-0 top-24 h-[32rem] opacity-35"
+        style={{
+          background:
+            "linear-gradient(115deg, transparent 20%, rgba(139,92,246,.20) 40%, rgba(34,211,238,.18) 60%, transparent 80%)",
+          filter: "blur(24px)",
+        }}
+      />
     </div>
   );
 }
@@ -499,10 +516,10 @@ export default function MemberHomePage() {
       ribbon: "from-violet-400/80 to-cyan-300/70"
     },
     2: {
-      frameFrom: "#22c55eAA", frameTo: "#22d3ee55",
-      btnFrom: "#22c55e", btnTo: "#2dd4bf",
-      glow: "shadow-[0_10px_32px_-8px_rgba(34,197,94,.35)]",
-      ribbon: "from-emerald-300/80 to-teal-300/70"
+      frameFrom: "#fb7185AA", frameTo: "#f97316AA",     // bingkai gradient merah→oranye lembut
+      btnFrom: "#ef4444", btnTo: "#fb7185",             // tombol merah→rose
+      glow: "shadow-[0_10px_32px_-8px_rgba(239,68,68,.35)]",
+      ribbon: "from-rose-300/90 to-amber-300/80",        // ribbon gradasi rose→amber
     },
     3: {
       frameFrom: "#f97316AA", frameTo: "#f59e0b88",
