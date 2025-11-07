@@ -449,12 +449,12 @@ export default function MemberHomePage() {
     sfxReveal.current = new Audio("/fantasy/sfx/reveal_burst.wav");
     sfxCoin.current   = new Audio("/fantasy/sfx/coin_sparkle.wav");
     sfxError.current  = new Audio("/fantasy/sfx/error_buzz.wav");
-    [sfxWhoosh, sfxReveal, sfxCoin].forEach(ref => { if (ref.current) ref.current.volume = 0.85; });
+    [sfxWhoosh, sfxReveal, sfxCoin].forEach(ref => { if (ref.current) ref.current.volume = 0.60; });
 
     // === BGM (try autoplay) ===
     const bgm = new Audio("/fantasy/music/bgm.mp3");
     bgm.loop = true;
-    const savedVol = Number(localStorage.getItem("bgmVol") ?? "0.68");
+    const savedVol = Number(localStorage.getItem("bgmVol") ?? "0.85");
     bgm.volume = isNaN(savedVol) ? 0.18 : Math.min(1, Math.max(0, savedVol));
     bgm.muted  = localStorage.getItem("bgmMuted") === "1";
     bgmRef.current = bgm;
