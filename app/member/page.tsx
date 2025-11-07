@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+/** =========================
+ * Types
+ * ========================*/
 type UserRole = "ADMIN" | "CS" | "MEMBER";
 
 type MemberProfile = {
@@ -15,15 +18,28 @@ type MemberProfile = {
 
 type PurchaseResult = {
   transaction_id: string;
-  status: string;
   credit_tier: number;
   credit_spent: number;
+  credits_before?: number | null;
+  credits_after?: number | null;
   rarity_id: string;
   rarity_code: string;
   rarity_name: string;
-  credits_before: number;
-  credits_after: number;
   expires_at: string;
+};
+
+type OpenBoxResult = {
+  transaction_id: string;
+  rarity_id: string;
+  rarity_code: string;
+  rarity_name: string;
+  reward_id: string | null;
+  reward_label: string;
+  reward_type: "CASH" | "ITEM";
+  reward_amount: number | null;
+  opened_at: string;
+  expires_at: string;
+  credits_after?: number | null;
 };
 
 type InventoryBox = {
@@ -35,23 +51,28 @@ type InventoryBox = {
   rarity_id: string | null;
 };
 
-type OpenBoxResult = {
-  transaction_id: string;
-  status: string;
-  rarity_id: string;
-  rarity_code: string;
-  rarity_name: string;
-  reward_id: string;
-  reward_label: string;
-  reward_type: string;
-  reward_amount: number;
-  opened_at: string;
-  expires_at: string;
-};
+/** =========================
+ * Helpers
+ * ========================*/
+function formatDateTime(iso: string) {
+  try {
+    const d = new Date(iso);
+    const dd = d.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "2-digit" });
+    const hh = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    return `${dd}, ${hh.replace(":", ".")}`;
+  } catch {
+    return iso;
+  }
+}
 
-type OpenedBoxInfo = OpenBoxResult & { credit_tier: number };
-
-// ==== Fantasy FX (Starter Pack, no assets) ==================================
+function formatIDR(n?: number | null) {
+  if (n == null) return "—";
+  try {
+    return new Intl.NumberFormat("id-ID").format(n);
+  } catch {
+    return String(n);
+  }
+}
 
 type RarityKey =
   | "COMMON"
@@ -61,18 +82,52 @@ type RarityKey =
   | "LEGENDARY"
   | "SPECIAL_LEGENDARY";
 
-const rarityPalette: Record<RarityKey, {
-  text: string;
-  from: string; // radial center
-  to: string;   // radial edge
-  ring: string; // ring accent
-}> = {
-  COMMON:           { text: "#d9f99d", from: "#245a2c", to: "#0b2a17", ring: "#52d787" },
-  RARE:             { text: "#cfe8ff", from: "#0f3a7a", to: "#081a3a", ring: "#56ccf2" },
-  EPIC:             { text: "#f5d0fe", from: "#4a1460", to: "#1a0b2a", ring: "#c471ed" },
-  SUPREME:          { text: "#fff1b8", from: "#6a5210", to: "#2a2108", ring: "#f7d774" },
-  LEGENDARY:        { text: "#fff6cc", from: "#6b4a00", to: "#2a1b00", ring: "#f9d976" },
-  SPECIAL_LEGENDARY:{ text: "#ffffff", from: "#2a0b2a", to: "#0b0b2a", ring: "#ffffff" },
+const rarityPalette: Record<
+  RarityKey,
+  { text: string; from: string; to: string; ring: string; chip: string }
+> = {
+  COMMON: {
+    text: "#d9f99d",
+    from: "#245a2c",
+    to: "#0b2a17",
+    ring: "#52d787",
+    chip: "text-green-200 border-green-400/40 bg-green-900/20",
+  },
+  RARE: {
+    text: "#cfe8ff",
+    from: "#0f3a7a",
+    to: "#081a3a",
+    ring: "#56ccf2",
+    chip: "text-sky-200 border-sky-400/40 bg-sky-900/20",
+  },
+  EPIC: {
+    text: "#f5d0fe",
+    from: "#4a1460",
+    to: "#1a0b2a",
+    ring: "#c471ed",
+    chip: "text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20",
+  },
+  SUPREME: {
+    text: "#fff1b8",
+    from: "#6a5210",
+    to: "#2a2108",
+    ring: "#f7d774",
+    chip: "text-amber-200 border-amber-400/40 bg-amber-900/20",
+  },
+  LEGENDARY: {
+    text: "#fff6cc",
+    from: "#6b4a00",
+    to: "#2a1b00",
+    ring: "#f9d976",
+    chip: "text-yellow-100 border-yellow-400/50 bg-yellow-900/20",
+  },
+  SPECIAL_LEGENDARY: {
+    text: "#ffffff",
+    from: "#2a0b2a",
+    to: "#0b0b2a",
+    ring: "#ffffff",
+    chip: "text-white border-white/60 bg-slate-50/5",
+  },
 };
 
 function toRarity(key: string): RarityKey {
@@ -82,18 +137,33 @@ function toRarity(key: string): RarityKey {
     : "COMMON";
 }
 
-function formatIDR(n?: number | null) {
-  if (n == null) return "—";
-  try {
-    return new Intl.NumberFormat("id-ID").format(n);
-  } catch { return String(n); }
+function rarityBadgeClasses(colorKey?: string) {
+  const base = "text-[10px] font-semibold px-2 py-[2px] rounded-full border";
+  switch ((colorKey || "").toLowerCase()) {
+    case "green":
+      return `${base} text-green-200 border-green-400/40 bg-green-900/20`;
+    case "blue":
+      return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
+    case "purple":
+      return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
+    case "yellow":
+      return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
+    case "gold":
+      return `${base} text-yellow-100 border-yellow-400/50 bg-yellow-900/20`;
+    case "rainbow":
+      return `${base} text-white border-white/50 bg-slate-50/5`;
+    default:
+      return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
+  }
 }
 
-// --- Overlay base ---
+/** =========================
+ * FX Overlay (Starter Pack)
+ * ========================*/
 type FXBaseProps = {
   open: boolean;
   onClose: () => void;
-  palette: ReturnType<typeof toRarity> extends never ? never : { text: string; from: string; to: string; ring: string };
+  palette: { text: string; from: string; to: string; ring: string };
   title: string;
   subtitle?: string;
   rainbowRing?: boolean;
@@ -101,9 +171,14 @@ type FXBaseProps = {
 };
 
 function FXOverlay({
-  open, onClose, palette, title, subtitle, rainbowRing=false, durationMs=1600
+  open,
+  onClose,
+  palette,
+  title,
+  subtitle,
+  rainbowRing = false,
+  durationMs = 1600,
 }: FXBaseProps) {
-  // auto close
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(onClose, durationMs);
@@ -114,15 +189,12 @@ function FXOverlay({
 
   return (
     <div className="fixed inset-0 z-[60] pointer-events-none">
-      {/* backdrop glow */}
       <div
         className="absolute inset-0 animate-fx-fade"
         style={{
-          background:
-            `radial-gradient(1200px 600px at 50% 45%, ${palette.from}, ${palette.to} 70%, rgba(0,0,0,0.96) 100%)`,
+          background: `radial-gradient(1200px 600px at 50% 45%, ${palette.from}, ${palette.to} 70%, rgba(0,0,0,0.96) 100%)`,
         }}
       />
-      {/* swirling ring */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div
           className="w-[68vmin] h-[68vmin] rounded-full blur-[2px] opacity-90 animate-fx-rotate-slow"
@@ -134,11 +206,9 @@ function FXOverlay({
           }}
         />
       </div>
-      {/* burst */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-[22vmin] h-[22vmin] rounded-full bg-white/30 blur-[30px] animate-fx-burst" />
       </div>
-      {/* title */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="px-6 py-4 rounded-2xl text-center">
           <div
@@ -155,30 +225,52 @@ function FXOverlay({
         </div>
       </div>
 
-      {/* inline keyframes so tailwind config tak perlu diubah */}
       <style jsx global>{`
-        @keyframes fx-fade { 0%{opacity:0} 12%{opacity:1} 88%{opacity:1} 100%{opacity:0} }
-        @keyframes fx-burst { 0%{transform:scale(.35);opacity:.0} 40%{opacity:.75} 100%{transform:scale(1.35);opacity:0} }
-        @keyframes fx-rotate-slow { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
-        @keyframes fx-pop { 0%{transform:translateY(8px) scale(.98);opacity:0}
-                             40%{opacity:1}
-                             100%{transform:translateY(0) scale(1);opacity:1} }
-        @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0}
-                                    50%{opacity:1}
-                                    100%{transform:translateY(0);opacity:1} }
-        .animate-fx-fade{animation:fx-fade 1.6s ease both}
-        .animate-fx-burst{animation:fx-burst 1.2s ease-out both}
-        .animate-fx-rotate-slow{animation:fx-rotate-slow 6s linear infinite}
-        .animate-fx-pop{animation:fx-pop .6s ease both}
-        .animate-fx-pop-delayed{animation:fx-pop-delayed .9s ease .15s both}
+        @keyframes fx-fade {
+          0% { opacity: 0 }
+          12% { opacity: 1 }
+          88% { opacity: 1 }
+          100% { opacity: 0 }
+        }
+        @keyframes fx-burst {
+          0% { transform: scale(.35); opacity: 0 }
+          40% { opacity: .75 }
+          100% { transform: scale(1.35); opacity: 0 }
+        }
+        @keyframes fx-rotate-slow {
+          0% { transform: rotate(0) }
+          100% { transform: rotate(360deg) }
+        }
+        @keyframes fx-pop {
+          0% { transform: translateY(8px) scale(.98); opacity: 0 }
+          40% { opacity: 1 }
+          100% { transform: translateY(0) scale(1); opacity: 1 }
+        }
+        @keyframes fx-pop-delayed {
+          0% { transform: translateY(8px); opacity: 0 }
+          50% { opacity: 1 }
+          100% { transform: translateY(0); opacity: 1 }
+        }
+        .animate-fx-fade { animation: fx-fade 1.6s ease both }
+        .animate-fx-burst { animation: fx-burst 1.2s ease-out both }
+        .animate-fx-rotate-slow { animation: fx-rotate-slow 6s linear infinite }
+        .animate-fx-pop { animation: fx-pop .6s ease both }
+        .animate-fx-pop-delayed { animation: fx-pop-delayed .9s ease .15s both }
       `}</style>
     </div>
   );
 }
 
-// --- Specific overlays ---
-function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{
-  open: boolean; rarityCode: string; rarityName: string; onClose: () => void;
+function PurchaseRarityFX({
+  open,
+  rarityCode,
+  rarityName,
+  onClose,
+}: {
+  open: boolean;
+  rarityCode: string;
+  rarityName: string;
+  onClose: () => void;
 }) {
   const pal = rarityPalette[toRarity(rarityCode)];
   const isRainbow = toRarity(rarityCode) === "SPECIAL_LEGENDARY";
@@ -195,13 +287,28 @@ function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{
   );
 }
 
-function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose }:{
-  open: boolean; rarityCode: string; rarityName: string;
-  rewardLabel: string; rewardType: string; rewardAmount: number | null;
+function OpenRewardFX({
+  open,
+  rarityCode,
+  rarityName,
+  rewardLabel,
+  rewardType,
+  rewardAmount,
+  onClose,
+}: {
+  open: boolean;
+  rarityCode: string;
+  rarityName: string;
+  rewardLabel: string;
+  rewardType: string;
+  rewardAmount: number | null;
   onClose: () => void;
 }) {
   const pal = rarityPalette[toRarity(rarityCode)];
-  const value = rewardType === "CASH" ? `+${formatIDR(rewardAmount)} saldo` : rewardLabel;
+  const value =
+    rewardType === "CASH"
+      ? `+${formatIDR(rewardAmount)} saldo`
+      : rewardLabel;
   const isRainbow = toRarity(rarityCode) === "SPECIAL_LEGENDARY";
   return (
     <FXOverlay
@@ -215,634 +322,352 @@ function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, r
     />
   );
 }
-// ==== End Fantasy FX =========================================================
 
+/** =========================
+ * Page
+ * ========================*/
 export default function MemberHomePage() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<MemberProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [buyingTier, setBuyingTier] = useState<number | null>(null);
-  const [lastPurchase, setLastPurchase] = useState<PurchaseResult | null>(
-    null,
-  );
-
-  // FX states (starter pack)
-  const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
-  const [fxOpen, setFxOpen] = useState<{
-    rarity_code: string; rarity_name: string; reward_label: string; reward_type: string; reward_amount: number | null;
-  } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [infoType, setInfoType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [infoType, setInfoType] = useState<"success" | "error" | null>(null);
 
-  // inventory box yang belum dibuka
   const [inventory, setInventory] = useState<InventoryBox[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
-  const [lastOpened, setLastOpened] = useState<OpenedBoxInfo | null>(null);
-  const [rarityMap, setRarityMap] = useState<Record<string, {code:string; name:string; color_key:string}>>({});
 
-  // ------------------- load profil member -------------------
+  // FX state
+  const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
+  const [fxOpen, setFxOpen] = useState<{
+    rarity_code: string;
+    rarity_name: string;
+    reward_label: string;
+    reward_type: string;
+    reward_amount: number | null;
+  } | null>(null);
 
+  // rarity map for badge
+  const [rarityMap, setRarityMap] = useState<
+    Record<string, { code: string; name: string; color_key: string }>
+  >({});
+
+  // Initial auth + profile
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error(userError);
-        setError("Gagal membaca sesi login.");
-        setLoading(false);
+    let alive = true;
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) {
+        router.push("/login");
         return;
       }
-
-      if (!user) {
-        router.push("/member/login");
-        return;
-      }
-
-      const { data: prof, error: profErr } = await supabase
+      const { data: p, error } = await supabase
         .from("profiles")
         .select("id, username, credit_balance, role")
-        .eq("id", user.id)
-        .maybeSingle<MemberProfile>();
+        .eq("id", userData.user.id)
+        .single();
 
-      if (profErr) {
-        console.error(profErr);
-        setError("Gagal membaca profil member.");
+      if (error || !p) {
+        setInfoType("error");
+        setInfoMessage("Gagal membaca profil member.");
         setLoading(false);
         return;
       }
-
-      if (!prof) {
-        setError("Profil belum dibuat untuk user ini.");
-        setLoading(false);
+      if (p.role !== "MEMBER") {
+        router.push("/");
         return;
       }
-
-      if (prof.role !== "MEMBER") {
-        setError("Halaman ini khusus untuk akun Member.");
-        setLoading(false);
-        return;
-      }
-
-      setProfile(prof);
+      if (!alive) return;
+      setProfile(p);
       setLoading(false);
-    }
+    })();
 
-    load();
+    return () => {
+      alive = false;
+    };
   }, [router]);
 
-  // ------------------- inventory: load dari box_transactions -------------------
-
-  async function reloadInventory() {
-    if (!profile) return;
-
-    setInventoryLoading(true);
-    setInventoryError(null);
-
-    try {
-      const nowIso = new Date().toISOString();
-
-      const { data, error } = await supabase
-        .from("box_transactions")
-        .select(
-          "id, credit_tier, status, expires_at, created_at, rarity_id",
-        )
-        .eq("member_profile_id", profile.id)
-        .eq("status", "PURCHASED")
-        .gt("expires_at", nowIso)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error(error);
-        setInventoryError("Gagal membaca inventory box.");
-        setInventoryLoading(false);
-        return;
-      }
-
-      setInventory((data || []) as InventoryBox[]);
-      setInventoryLoading(false);
-    } catch (err) {
-      console.error(err);
-      setInventoryError("Terjadi kesalahan saat membaca inventory box.");
-      setInventoryLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!profile) return;
-    reloadInventory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile]);
-
+  // rarity map
   useEffect(() => {
     let alive = true;
     (async () => {
       const { data, error } = await supabase
         .from("box_rarities")
         .select("id, code, name, color_key");
-      if (!error && alive && data) {
+      if (!error && data && alive) {
         const map = Object.fromEntries(
-          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key }])
+          data.map((r) => [r.id, { code: r.code, name: r.name, color_key: r.color_key }])
         );
         setRarityMap(map);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // ------------------- util -------------------
+  const nowIso = useMemo(() => new Date().toISOString(), []);
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/member/login");
-  }
+  // Load inventory
+  const reloadInventory = async (memberId: string) => {
+    setInventoryLoading(true);
+    setInventoryError(null);
+    const { data, error } = await supabase
+      .from("box_transactions")
+      .select("id, credit_tier, status, expires_at, created_at, rarity_id")
+      .eq("member_profile_id", memberId)
+      .eq("status", "PURCHASED")
+      .gt("expires_at", nowIso)
+      .order("created_at", { ascending: false });
 
-  function showInfo(msg: string, type: "success" | "error") {
-    setInfoMessage(msg);
-    setInfoType(type);
-    setTimeout(() => {
-      setInfoMessage(null);
-      setInfoType(null);
-    }, 4000);
-  }
-
-  function formatDateTime(dateStr: string) {
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    return d.toLocaleString("id-ID", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  }
-
-  function rarityBadgeClasses(colorKey?: string) {
-    const base = "text-[10px] font-semibold px-2 py-[2px] rounded-full border";
-    switch ((colorKey || "").toLowerCase()) {
-      case "green":  return `${base} text-green-200 border-green-400/40 bg-green-900/20`;
-      case "blue":   return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
-      case "purple": return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
-      case "yellow": return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
-      case "gold":   return `${base} text-yellow-100 border-yellow-400/50 bg-yellow-900/20`;
-      case "rainbow":return `${base} text-white border-white/50 bg-slate-50/5`;
-      default:       return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
+    if (error) {
+      console.error(error);
+      setInventoryError("Gagal membaca inventory box.");
+      setInventoryLoading(false);
+      return;
     }
-  }
+    setInventory((data ?? []) as any);
+    setInventoryLoading(false);
+  };
 
-  // ------------------- beli box (purchase_box) -------------------
+  // on profile ready -> load inventory
+  useEffect(() => {
+    if (profile?.id) reloadInventory(profile.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
-  async function handleBuyBox(tier: number) {
+  // Purchase handler
+  const handlePurchase = async (tier: 1 | 2 | 3) => {
     if (!profile) return;
-    setBuyingTier(tier);
-    setError(null);
+    setInfoMessage(null);
+    setInfoType(null);
 
-    try {
-      const { data, error } = await supabase.rpc("purchase_box", {
-        p_credit_tier: tier,
-      });
+    const { data, error } = await supabase.rpc("purchase_box", {
+      p_credit_tier: tier,
+    });
 
-      if (error) {
-        console.error(error);
-        showInfo(
-          error.message || "Gagal membeli box. Coba lagi nanti.",
-          "error",
-        );
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        showInfo(
-          "Tidak ada data transaksi yang dikembalikan.",
-          "error",
-        );
-        return;
-      }
-
-      const result = data[0] as PurchaseResult;
-
-      // trigger rarity reveal FX
-      setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
-
-      // update saldo di UI
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              credit_balance: result.credits_after,
-            }
-          : prev,
-      );
-
-      setLastPurchase(result);
-
-      // refresh inventory dari database
-      await reloadInventory();
-
-      showInfo(
-        `Berhasil membeli box ${result.credit_tier} credit. Rarity: ${result.rarity_name} (${result.rarity_code}).`,
-        "success",
-      );
-    } catch (err: any) {
-      console.error(err);
-      showInfo(
-        err?.message || "Gagal membeli box. Coba lagi nanti.",
-        "error",
-      );
-    } finally {
-      setBuyingTier(null);
+    if (error || !data || !Array.isArray(data) || data.length === 0) {
+      console.error(error);
+      setInfoType("error");
+      setInfoMessage(error?.message || "Gagal membeli box.");
+      return;
     }
-  }
 
-  // ------------------- buka box (open_box) -------------------
+    const result = data[0] as PurchaseResult;
 
-  async function handleOpenBox(box: InventoryBox) {
+    // Update credit UI (jaga-jaga kalau result mengandung credits_after)
+    if (typeof result.credits_after === "number") {
+      setProfile((p) => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
+    } else {
+      // fallback: refetch profile balance
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("id, username, credit_balance, role")
+        .eq("id", profile.id)
+        .single();
+      if (p) setProfile(p as any);
+    }
+
+    // FX reveal rarity
+    setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
+
+    // Refresh inventory
+    await reloadInventory(profile.id);
+
+    setInfoType("success");
+    setInfoMessage(`Berhasil beli Box ${result.credit_tier} • ${result.rarity_name}`);
+  };
+
+  // Open box handler
+  const handleOpenBox = async (box: InventoryBox) => {
     if (!profile) return;
     setOpeningId(box.id);
+    setInfoMessage(null);
+    setInfoType(null);
 
-    try {
-      const { data, error } = await supabase.rpc("open_box", {
-        p_transaction_id: box.id,
-      });
+    const { data, error } = await supabase.rpc("open_box", {
+      p_transaction_id: box.id,
+    });
 
-      if (error) {
-        console.error(error);
-        showInfo(
-          error.message || "Gagal membuka box. Coba lagi nanti.",
-          "error",
-        );
-        // kalau error (mis. hangus), refresh inventory supaya row hilang
-        await reloadInventory();
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        showInfo(
-          "Tidak ada data hasil buka box yang dikembalikan.",
-          "error",
-        );
-        await reloadInventory();
-        return;
-      }
-
-      const result = data[0] as OpenBoxResult;
-
-      // trigger reward reveal FX
-      setFxOpen({
-        rarity_code: result.rarity_code,
-        rarity_name: result.rarity_name,
-        reward_label: result.reward_label,
-        reward_type: result.reward_type,
-        reward_amount: result.reward_amount ?? null,
-      });
-
-      // update inventory (remove box yang baru dibuka)
-      setInventory((prev) => prev.filter((b) => b.id !== box.id));
-
-      // simpan info box terakhir dibuka (untuk ditampilkan di bawah)
-      const opened: OpenedBoxInfo = {
-        ...result,
-        credit_tier: box.credit_tier,
-      };
-      setLastOpened(opened);
-
-      showInfo(
-        `Box ${box.credit_tier} credit terbuka! Rarity: ${result.rarity_name} (${result.rarity_code}) — Hadiah: ${result.reward_label}`,
-        "success",
-      );
-    } catch (err: any) {
-      console.error(err);
-      showInfo(
-        err?.message || "Gagal membuka box. Coba lagi nanti.",
-        "error",
-      );
-      await reloadInventory();
-    } finally {
+    if (error || !data || data.length === 0) {
+      console.error(error);
+      setInfoType("error");
+      setInfoMessage(error?.message || "Gagal membuka box.");
       setOpeningId(null);
+      return;
     }
-  }
 
-  // ------------------- render -------------------
+    const result = data[0] as OpenBoxResult;
+
+    // FX reward
+    setFxOpen({
+      rarity_code: result.rarity_code,
+      rarity_name: result.rarity_name,
+      reward_label: result.reward_label,
+      reward_type: result.reward_type,
+      reward_amount: result.reward_amount ?? null,
+    });
+
+    // Remove from inventory (optimistic)
+    setInventory((prev) => prev.filter((i) => i.id !== box.id));
+
+    // Update credit if returned
+    if (typeof result.credits_after === "number") {
+      setProfile((p) => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
+    }
+
+    setOpeningId(null);
+    setInfoType("success");
+    setInfoMessage(`Kamu mendapatkan: ${result.reward_label}`);
+  };
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-slate-300">
-          Memuat data member...
-        </p>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4">
-        <p className="mb-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-          {error}
-        </p>
-        <button
-          onClick={() => router.push("/member/login")}
-          className="rounded-lg border border-slate-600 px-4 py-2 text-xs text-slate-200 hover:bg-slate-800 transition"
-        >
-          Kembali ke login member
-        </button>
+      <main className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100 p-6">
+        <div className="max-w-5xl mx-auto">Memuat...</div>
       </main>
     );
   }
 
   if (!profile) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-slate-300">
-          Profil tidak ditemukan.
-        </p>
+      <main className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100 p-6">
+        <div className="max-w-5xl mx-auto">Tidak bisa membaca profil.</div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-start justify-center px-4 py-10">
-      <div className="w-full max-w-3xl space-y-6">
+    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_50%_-10%,#0f172a_0%,#0b1220_60%,#0b0f1a_100%)] text-slate-100">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
-              Member Site
-            </p>
-            <h1 className="text-2xl font-semibold">
-              Masuk ke Dunia Fantasy
-            </h1>
+            <div className="text-xs tracking-widest text-slate-400">MEMBER SITE</div>
+            <h1 className="text-2xl md:text-3xl font-extrabold">Masuk ke Dunia Fantasy</h1>
             <p className="text-sm text-slate-400">
-              Beli mystery box dengan credit kamu. Setiap box punya peluang
-              rarity yang berbeda.
+              Beli mystery box dengan credit kamu. Setiap box punya peluang rarity yang berbeda.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-right">
-              <p className="text-xs text-slate-400">
-                Login sebagai
-              </p>
-              <p className="text-sm font-semibold">
-                {profile.username || "Member"}
-              </p>
-              <p className="text-xs text-emerald-300">
-                {profile.credit_balance ?? 0} credit
-              </p>
+            <div className="text-xs text-slate-400">Login sebagai</div>
+            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60">
+              <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
+              <span className="ml-2 text-emerald-400/90">
+                {formatIDR(profile.credit_balance)} credit
+              </span>
             </div>
             <button
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800 transition"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                router.push("/login");
+              }}
+              className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50"
             >
               Logout
             </button>
           </div>
         </div>
 
+        {/* Buy cards */}
+        <div className="grid md:grid-cols-3 gap-4 mt-8">
+          {[1, 2, 3].map((tier) => (
+            <div
+              key={tier}
+              className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-4"
+            >
+              <div className="text-lg font-semibold">Box {tier} Credit</div>
+              <p className="text-xs text-slate-400 mt-1">
+                {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
+                {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
+                {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
+              </p>
+              <button
+                onClick={() => handlePurchase(tier as 1 | 2 | 3)}
+                className="mt-4 w-full rounded-full bg-violet-500 hover:bg-violet-400 text-black font-semibold py-2"
+              >
+                Beli Box {tier} Credit
+              </button>
+            </div>
+          ))}
+        </div>
+
         {/* Info message */}
-        {infoMessage && infoType && (
+        {infoMessage && (
           <div
-            className={`rounded-lg border px-4 py-3 text-sm ${
+            className={`mt-4 rounded-lg px-3 py-2 text-sm ${
               infoType === "success"
-                ? "border-emerald-500/70 bg-emerald-950/40 text-emerald-200"
-                : "border-red-500/70 bg-red-950/40 text-red-200"
+                ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-200"
+                : "bg-rose-500/10 border border-rose-500/30 text-rose-200"
             }`}
           >
             {infoMessage}
           </div>
         )}
 
-        {/* Kartu box (beli) */}
-        <section className="grid gap-4 md:grid-cols-3">
-          {/* Box 1 credit */}
-          <div className="rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-100">
-                Box 1 Credit
-              </h2>
-              <p className="text-xs text-slate-400">
-                Minimal dapat <span className="font-semibold">Common</span>.
-                Cocok buat coba peruntungan.
-              </p>
-            </div>
-            <button
-              onClick={() => handleBuyBox(1)}
-              disabled={buyingTier === 1}
-              className="mt-4 w-full rounded-xl bg-violet-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-violet-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
-            >
-              {buyingTier === 1 ? "Memproses..." : "Beli Box 1 Credit"}
-            </button>
-          </div>
-
-          {/* Box 2 credit */}
-          <div className="rounded-2xl border border-sky-700/70 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-sky-100">
-                Box 2 Credit
-              </h2>
-              <p className="text-xs text-slate-300">
-                Start dari{" "}
-                <span className="font-semibold text-sky-300">Rare</span> ke
-                atas. Common tidak mungkin keluar.
-              </p>
-            </div>
-            <button
-              onClick={() => handleBuyBox(2)}
-              disabled={buyingTier === 2}
-              className="mt-4 w-full rounded-xl bg-sky-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
-            >
-              {buyingTier === 2 ? "Memproses..." : "Beli Box 2 Credit"}
-            </button>
-          </div>
-
-          {/* Box 3 credit */}
-          <div className="rounded-2xl border border-purple-700/70 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950/90 p-4 flex flex-col justify-between">
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-purple-100">
-                Box 3 Credit
-              </h2>
-              <p className="text-xs text-slate-300">
-                Start dari{" "}
-                <span className="font-semibold text-purple-300">Epic</span>{" "}
-                ke atas. Common &amp; Rare tidak mungkin keluar.
-              </p>
-            </div>
-            <button
-              onClick={() => handleBuyBox(3)}
-              disabled={buyingTier === 3}
-              className="mt-4 w-full rounded-xl bg-purple-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-purple-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
-            >
-              {buyingTier === 3 ? "Memproses..." : "Beli Box 3 Credit"}
-            </button>
-          </div>
-        </section>
-
-        {/* Inventory box */}
-        <section className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold">
-                Inventory Box Kamu
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Box bisa disimpan maksimal 7 hari. Setelah itu akan hangus
-                otomatis.
-              </p>
-            </div>
-            <p className="text-[11px] text-slate-500">
+        {/* Inventory */}
+        <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/70">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/70">
+            <div className="text-sm font-semibold text-slate-200">Inventory Box Kamu</div>
+            <div className="text-xs text-slate-400">
               {inventory.length} box menunggu dibuka
-            </p>
+            </div>
           </div>
-
-          {inventoryError && (
-            <p className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-[11px] text-red-200">
-              {inventoryError}
-            </p>
-          )}
 
           {inventoryLoading ? (
-            <p className="text-xs text-slate-400">
-              Memuat inventory box...
-            </p>
+            <div className="px-4 py-6 text-sm text-slate-400">Memuat inventory…</div>
+          ) : inventoryError ? (
+            <div className="px-4 py-6 text-sm text-rose-300">{inventoryError}</div>
           ) : inventory.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              Kamu belum punya box yang menunggu dibuka.
-            </p>
+            <div className="px-4 py-6 text-sm text-slate-400">Belum ada box.</div>
           ) : (
-            <ul className="space-y-2">
-              {inventory.map((box) => (
-                <li
-                  key={box.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-950/80 px-3 py-3"
-                >
-                  <div>
-                    <p className="text-xs font-semibold text-slate-100">
-                      Box {box.credit_tier} Credit
-                      {box.rarity_id && rarityMap[box.rarity_id] && (
-                        <span className={rarityBadgeClasses(rarityMap[box.rarity_id].color_key)}>
-                          {rarityMap[box.rarity_id].name}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      Kadaluarsa:{" "}
-                      <span className="font-medium">
-                        {formatDateTime(box.expires_at)}
-                      </span>
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleOpenBox(box)}
-                    disabled={openingId === box.id}
-                    className="rounded-xl bg-amber-400 px-3 py-2 text-[11px] font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            <ul className="divide-y divide-slate-800/70">
+              {inventory.map((box) => {
+                const rar = box.rarity_id ? rarityMap[box.rarity_id] : undefined;
+                return (
+                  <li
+                    key={box.id}
+                    className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-900/50"
                   >
-                    {openingId === box.id ? "Membuka..." : "Buka Box"}
-                  </button>
-                </li>
-              ))}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
+                        Box {box.credit_tier} Credit
+                        {rar && (
+                          <span className={rarityBadgeClasses(rar.color_key)}>
+                            {rar.name}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Kadaluarsa:{" "}
+                        <span className="font-medium">{formatDateTime(box.expires_at)}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleOpenBox(box)}
+                      disabled={openingId === box.id}
+                      className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
+                    >
+                      {openingId === box.id ? "Membuka…" : "Buka Box"}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
-        </section>
-
-        {/* Pembelian terakhir */}
-        {lastPurchase && (
-          <section className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 space-y-2">
-            <h2 className="text-sm font-semibold">
-              Pembelian Terakhir
-            </h2>
-            <p className="text-xs text-slate-300">
-              Box{" "}
-              <span className="font-semibold">
-                {lastPurchase.credit_tier}
-              </span>{" "}
-              credit, rarity{" "}
-              <span className="font-semibold">
-                {lastPurchase.rarity_name} ({lastPurchase.rarity_code})
-              </span>
-              .
-            </p>
-            <p className="text-xs text-slate-400">
-              Credit sebelum beli:{" "}
-              <span className="font-semibold">
-                {lastPurchase.credits_before}
-              </span>{" "}
-              • setelah beli:{" "}
-              <span className="font-semibold">
-                {lastPurchase.credits_after}
-              </span>
-            </p>
-            <p className="text-xs text-slate-400">
-              Box ini bisa dibuka sampai{" "}
-              <span className="font-semibold">
-                {formatDateTime(lastPurchase.expires_at)}
-              </span>
-              .
-            </p>
-            <p className="text-[11px] text-slate-500">
-              (Inventory & tombol buka box tersedia di bagian atas.)
-            </p>
-          </section>
-        )}
-
-        {/* Box terakhir dibuka */}
-        {lastOpened && (
-          <section className="mt-2 rounded-2xl border border-amber-500/70 bg-amber-950/40 p-4 space-y-2">
-            <h2 className="text-sm font-semibold text-amber-100">
-              Box Terakhir Dibuka
-            </h2>
-            <p className="text-xs text-amber-100">
-              Box{" "}
-              <span className="font-semibold">
-                {lastOpened.credit_tier}
-              </span>{" "}
-              credit dengan rarity{" "}
-              <span className="font-semibold">
-                {lastOpened.rarity_name} ({lastOpened.rarity_code})
-              </span>
-              .
-            </p>
-            <p className="text-xs text-amber-100">
-              Hadiah:{" "}
-              <span className="font-semibold">
-                {lastOpened.reward_label}
-              </span>
-              {lastOpened.reward_type === "CASH" &&
-                ` (Rp ${lastOpened.reward_amount.toLocaleString(
-                  "id-ID",
-                )})`}
-            </p>
-            <p className="text-[11px] text-amber-200">
-              Dibuka pada{" "}
-              <span className="font-semibold">
-                {formatDateTime(lastOpened.opened_at)}
-              </span>
-              .
-            </p>
-            <p className="text-[11px] text-amber-200">
-              Setelah ini, hadiah akan ditindaklanjuti oleh Admin / CS via
-              kontak yang disediakan di member site.
-            </p>
-          </section>
-        )}
+        </div>
       </div>
-      {/* === Fantasy FX Overlays (Starter Pack) === */}
+
+      {/* FX Overlays */}
       <PurchaseRarityFX
         open={!!fxPurchase}
         rarityCode={fxPurchase?.code ?? ""}
         rarityName={fxPurchase?.name ?? ""}
         onClose={() => setFxPurchase(null)}
       />
-
       <OpenRewardFX
         open={!!fxOpen}
         rarityCode={fxOpen?.rarity_code ?? ""}
