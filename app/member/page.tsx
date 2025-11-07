@@ -32,6 +32,7 @@ type InventoryBox = {
   status: "PURCHASED" | "OPENED" | "EXPIRED";
   expires_at: string;
   created_at: string;
+  rarity_id: string | null;
 };
 
 type OpenBoxResult = {
@@ -245,6 +246,7 @@ export default function MemberHomePage() {
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [lastOpened, setLastOpened] = useState<OpenedBoxInfo | null>(null);
+  const [rarityMap, setRarityMap] = useState<Record<string, {code:string; name:string; color_key:string}>>({});
 
   // ------------------- load profil member -------------------
 
@@ -316,7 +318,7 @@ export default function MemberHomePage() {
       const { data, error } = await supabase
         .from("box_transactions")
         .select(
-          "id, credit_tier, status, expires_at, created_at",
+          "id, credit_tier, status, expires_at, created_at, rarity_id",
         )
         .eq("member_profile_id", profile.id)
         .eq("status", "PURCHASED")
@@ -345,6 +347,22 @@ export default function MemberHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("box_rarities")
+        .select("id, code, name, color_key");
+      if (!error && alive && data) {
+        const map = Object.fromEntries(
+          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key }])
+        );
+        setRarityMap(map);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // ------------------- util -------------------
 
   async function handleLogout() {
@@ -368,6 +386,19 @@ export default function MemberHomePage() {
       dateStyle: "short",
       timeStyle: "short",
     });
+  }
+
+  function rarityBadgeClasses(colorKey?: string) {
+    const base = "text-[10px] font-semibold px-2 py-[2px] rounded-full border";
+    switch ((colorKey || "").toLowerCase()) {
+      case "green":  return `${base} text-green-200 border-green-400/40 bg-green-900/20`;
+      case "blue":   return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
+      case "purple": return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
+      case "yellow": return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
+      case "gold":   return `${base} text-yellow-100 border-yellow-400/50 bg-yellow-900/20`;
+      case "rainbow":return `${base} text-white border-white/50 bg-slate-50/5`;
+      default:       return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
+    }
   }
 
   // ------------------- beli box (purchase_box) -------------------
@@ -697,6 +728,11 @@ export default function MemberHomePage() {
                   <div>
                     <p className="text-xs font-semibold text-slate-100">
                       Box {box.credit_tier} Credit
+                      {box.rarity_id && rarityMap[box.rarity_id] && (
+                        <span className={rarityBadgeClasses(rarityMap[box.rarity_id].color_key)}>
+                          {rarityMap[box.rarity_id].name}
+                        </span>
+                      )}
                     </p>
                     <p className="text-[11px] text-slate-400">
                       Kadaluarsa:{" "}
