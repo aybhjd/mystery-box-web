@@ -69,6 +69,10 @@ function formatIDR(n?: number | null) {
   try { return new Intl.NumberFormat("id-ID").format(n); } catch { return String(n); }
 }
 
+function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
+function rnd(min: number, max: number) { return Math.random() * (max - min) + min; }
+
+
 type RarityKey = "COMMON" | "RARE" | "EPIC" | "SUPREME" | "LEGENDARY" | "SPECIAL_LEGENDARY";
 
 const rarityPalette: Record<RarityKey, { text: string; from: string; to: string; ring: string }> = {
@@ -76,8 +80,10 @@ const rarityPalette: Record<RarityKey, { text: string; from: string; to: string;
   RARE: { text: "#cfe8ff", from: "#0f3a7a", to: "#081a3a", ring: "#56ccf2" },
   EPIC: { text: "#f5d0fe", from: "#4a1460", to: "#1a0b2a", ring: "#c471ed" },
   SUPREME: { text: "#fff1b8", from: "#6a5210", to: "#2a2108", ring: "#f7d774" },
-  LEGENDARY: { text: "#fecaca", from: "#7f1d1d", to: "#2a0b0b", ring: "#ef4444" }, // merah
-  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#101426", to: "#0b0d1a", ring: "#ffffff" }, // dasar gelap, nanti raybow
+  // Legendary → merah
+  LEGENDARY: { text: "#fecaca", from: "#7f1d1d", to: "#2a0b0b", ring: "#ef4444" },
+  // Special Legendary → white core; gradient accents ditangani di badge
+  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#1a1026", to: "#100a1a", ring: "#ffffff" },
 };
 function toRarity(key: string): RarityKey {
   const k = (key || "").toUpperCase() as RarityKey;
@@ -90,10 +96,9 @@ function rarityBadgeClasses(colorKey?: string) {
     case "blue": return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
     case "purple": return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
     case "yellow": return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
-    case "gold": return `${base} text-rose-200 border-rose-400/50 bg-rose-900/25`; // legendary merah
+    case "gold": return `${base} text-rose-200 border-rose-400/50 bg-rose-900/25`;
     case "rainbow":
-      return `${base} border-transparent text-white
-              bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]`;
+      return `${base} border-white/50 bg-slate-900/30 text-transparent bg-clip-text bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]`;
     default: return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
   }
 }
@@ -105,20 +110,14 @@ function badgeSrcFromCode(code: string) {
 /* =========================
    Lightweight Modal
 ========================= */
-function Modal({
-  open, onClose, title, children, widthClass = "max-w-md"
-}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; widthClass?: string; }) {
+function Modal({ open, onClose, title, children, widthClass = "max-w-md" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; widthClass?: string; }) {
   return (
-    <div className={`fixed inset-0 z-[80] transition-opacity duration-150 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
+    <div className={`fixed inset-0 z-[70] transition-opacity duration-150 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`} aria-hidden={!open}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] ${widthClass}
-                       rounded-2xl border border-slate-700/70 bg-slate-950/95 p-4
-                       transition-transform duration-150 ${open ? "scale-100" : "scale-95"}`}>
+      <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] ${widthClass} rounded-2xl border border-slate-700/70 bg-slate-950/95 p-4 transition-transform duration-150 ${open ? "scale-100" : "scale-95"}`}>
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-semibold text-slate-200">{title}</div>
-          <button onClick={onClose} className="text-xs px-2 py-1 rounded-md border border-slate-600/60 hover:bg-slate-800/60">
-            Tutup
-          </button>
+          <button onClick={onClose} className="text-xs px-2 py-1 rounded-md border border-slate-600/60 hover:bg-slate-800/60">Tutup</button>
         </div>
         <div className="text-sm text-slate-300">{children}</div>
       </div>
@@ -127,178 +126,185 @@ function Modal({
 }
 
 /* =========================
-   FX Overlays (wah, mobile-friendly)
+   DELUXE FX Overlays (mobile-friendly)
+   — efek: flash, shockwave, rays, sparks, confetti (saat OPEN), glints
 ========================= */
 type FXBaseProps = {
   open: boolean; onClose: () => void;
   palette: { text: string; from: string; to: string; ring: string };
   title: string; subtitle?: string; chestSrc: string; showBadge?: string; durationMs?: number;
+  variant?: "purchase" | "open";
 };
 
-function FXOverlay({
-  open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 2400,
-}: FXBaseProps) {
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(onClose, durationMs);
-    return () => clearTimeout(t);
-  }, [open, onClose, durationMs]);
+function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 1800, variant = "purchase" }: FXBaseProps) {
+  // auto close
+  useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
+  // precompute particles
+  const sparks = useMemo(() => {
+    if (!open) return [] as { tx: number; ty: number; delay: number; dur: number; size: number }[];
+    const arr: { tx: number; ty: number; delay: number; dur: number; size: number }[] = [];
+    const count = variant === "open" ? 34 : 22;
+    for (let i = 0; i < count; i++) {
+      const angle = rnd(0, Math.PI * 2);
+      const dist = rnd(80, 200); // px
+      arr.push({ tx: Math.cos(angle) * dist, ty: Math.sin(angle) * dist, delay: Math.floor(rnd(0, 120)), dur: Math.floor(rnd(520, 900)), size: rnd(2, 4) });
+    }
+    return arr;
+  }, [open, variant]);
+
+  const confetti = useMemo(() => {
+    if (!open || variant !== "open") return [] as { x: number; rot: number; delay: number; dur: number; w: number; h: number }[];
+    const arr: { x: number; rot: number; delay: number; dur: number; w: number; h: number }[] = [];
+    for (let i = 0; i < 26; i++) {
+      arr.push({ x: rnd(-140, 140), rot: rnd(-120, 120), delay: Math.floor(rnd(0, 120)), dur: Math.floor(rnd(700, 1100)), w: rnd(4, 8), h: rnd(8, 16) });
+    }
+    return arr;
+  }, [open, variant]);
 
   if (!open) return null;
-
-  // generate sparkle dots once
-  const dots = useMemo(
-    () => new Array(32).fill(0).map((_, i) => ({
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 100}%`,
-      s: 2 + Math.random() * 4,
-      d: 800 + Math.random() * 1200 + i * 8,
-      o: 0.4 + Math.random() * 0.6,
-    })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
   return (
-    <div className="fixed inset-0 z-[99]">
-      {/* Darken + aurora base */}
+    <div className="fixed inset-0 z-[75] overflow-hidden">
+      {/* quick white flash */}
+      <div className="absolute inset-0 pointer-events-none mix-blend-screen bg-white/80 animate-fx-flash" />
+
+      {/* tinted dark background + radial glow */}
       <div className="absolute inset-0"
-           style={{
-             background:
-               `radial-gradient(900px 480px at 50% 45%, ${palette.from}, transparent 60%),
-                radial-gradient(1200px 640px at 50% 50%, ${palette.to}, rgba(0,0,0,.95))`
-           }} />
+        style={{
+          background:
+            `linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.92)), radial-gradient(900px 500px at 50% 45%, ${palette.from}, ${palette.to} 70%)`
+        }}
+      />
 
-      {/* Rotating rays (conic) */}
+      {/* rotating rays */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[90vmin] h-[90vmin] rounded-full opacity-[.16] blur-[1px]
-                        animate-spin-slow"
-             style={{
-               background:
-                 "conic-gradient(from 0deg, transparent 0deg, white 30deg, transparent 60deg, transparent 120deg, white 150deg, transparent 180deg, transparent 240deg, white 270deg, transparent 300deg, transparent 360deg)",
-               maskImage:
-                 "radial-gradient(closest-side, black 65%, transparent 66%)",
-             }} />
+        <div className="w-[120vmin] h-[120vmin] rounded-full opacity-20 blur-sm animate-fx-rays"
+             style={{ backgroundImage: `repeating-conic-gradient(from 0deg, ${palette.ring} 0deg 3deg, transparent 3deg 12deg)` }} />
       </div>
 
-      {/* Shockwave ring */}
+      {/* shockwave triple rings */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[8vmin] h-[8vmin] rounded-full border border-white/50 animate-wave" />
+        <div className="w-[58vmin] h-[58vmin] rounded-full border-2 border-white/35 shadow-[0_0_120px_20px_rgba(255,255,255,.15)] animate-fx-wave" />
       </div>
-
-      {/* Halo + particles */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[56vmin] h-[56vmin] rounded-full bg-white/10 blur-3xl animate-pulse-slow" />
+        <div className="w-[42vmin] h-[42vmin] rounded-full border-2 border-[${palette.ring}]/70 animate-fx-wave-del2" />
       </div>
-      <div className="absolute inset-0 pointer-events-none">
-        {dots.map((p, i) => (
-          <span key={i}
-                className="absolute rounded-full bg-white animate-spark"
-                style={{
-                  left: p.left, top: p.top, width: p.s, height: p.s,
-                  opacity: p.o, animationDuration: `${p.d}ms`
-                }} />
-        ))}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[70vmin] h-[70vmin] rounded-full border border-white/20 animate-fx-wave-del3" />
       </div>
 
-      {/* Chest & text */}
+      {/* core chest */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <img src={chestSrc} alt="" className="w-[40vmin] max-w-[420px] drop-shadow-[0_0_24px_rgba(255,255,255,.25)] animate-chest-pop will-change-transform" />
+        <img src={chestSrc} alt="" className="w-[40vmin] max-w-[440px] animate-fx-pop will-change-transform drop-shadow-[0_0_40px_rgba(255,255,255,.35)]" />
       </div>
+
+      {/* title & subtitle & badge */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="mt-[28vmin] px-6 py-4 rounded-2xl text-center">
-          <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-title-pop" style={{ color: palette.text }}>
+        <div className="mt-[30vmin] px-6 py-4 rounded-2xl text-center">
+          <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-fx-pop" style={{ color: palette.text }}>
             {title}
           </div>
-          {subtitle && <div className="mt-2 text-base md:text-lg text-slate-100/95 animate-subtitle-pop">{subtitle}</div>}
+          {subtitle && <div className="mt-1 text-base md:text-lg text-slate-200/90 animate-fx-pop-delayed">{subtitle}</div>}
           {showBadge && (
-            <div className="mt-3 flex items-center justify-center animate-subtitle-pop">
-              <img src={showBadge} alt="badge" className="h-8 opacity-95" />
+            <div className="mt-2 flex items-center justify-center animate-fx-pop-delayed">
+              <img src={showBadge} alt="badge" className="h-8 opacity-95 drop-shadow-[0_0_12px_rgba(255,255,255,.5)]" />
             </div>
           )}
         </div>
       </div>
 
+      {/* glints */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[60vmin] h-[60vmin] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.18)_0%,rgba(255,255,255,0)_60%)] animate-fx-glint" />
+      </div>
+
+      {/* sparks */}
+      <div className="absolute inset-0 pointer-events-none">
+        {sparks.map((s, i) => (
+          <span key={i}
+            className="absolute left-1/2 top-1/2 block rounded-full opacity-0 will-change-transform"
+            style={{
+              width: `var(--sz)`, height: `var(--sz)`,
+              // @ts-ignore - CSS vars via style
+              ["--tx" as any]: `${s.tx}px`, ["--ty" as any]: `${s.ty}px`, ["--sz" as any]: `${s.size}px`,
+              ["--dur" as any]: `${s.dur}ms`, ["--delay" as any]: `${s.delay}ms`,
+              background: `radial-gradient(circle, #fff 0%, ${palette.ring} 60%, transparent 70%)`,
+              boxShadow: "0 0 10px rgba(255,255,255,.25)",
+              animation: "fx-spark var(--dur) ease-out var(--delay) both"
+            }}/>
+        ))}
+      </div>
+
+      {/* confetti (open only) */}
+      {variant === "open" && (
+        <div className="absolute inset-0 pointer-events-none">
+          {confetti.map((c, i) => (
+            <span key={i}
+              className="absolute left-1/2 top-1/2 block origin-center opacity-0 will-change-transform"
+              style={{
+                // @ts-ignore vars
+                ["--x" as any]: `${c.x}px`, ["--rot" as any]: `${c.rot}deg`, ["--dur" as any]: `${c.dur}ms`, ["--delay" as any]: `${c.delay}ms`,
+                width: `${c.w}px`, height: `${c.h}px`,
+                background: i % 5 === 0 ? "#fde047" : i % 5 === 1 ? "#60a5fa" : i % 5 === 2 ? "#34d399" : i % 5 === 3 ? "#f472b6" : "#f97316",
+                borderRadius: "2px",
+                animation: "fx-confetti var(--dur) cubic-bezier(.2,.7,0,1) var(--delay) both",
+                boxShadow: "0 0 10px rgba(0,0,0,.25)"
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* CSS animations (scoped global) */}
       <style jsx global>{`
-        @keyframes wave {
-          0%   { transform: scale(1); opacity: .75; }
-          70%  { transform: scale(18); opacity: 0; }
-          100% { transform: scale(18); opacity: 0; }
-        }
-        @keyframes spark {
-          0%   { transform: translateY(0) scale(1); opacity: .7; }
-          100% { transform: translateY(-40px) scale(.6); opacity: 0; }
-        }
-        @keyframes chest-pop {
-          0% { transform: translateY(12px) scale(.94) rotate(-1deg); opacity: 0; }
-          40%{ transform: translateY(0) scale(1.02) rotate(1deg); opacity: 1; }
-          70%{ transform: translateY(0) scale(.99) rotate(-.5deg); }
-          100%{ transform: translateY(0) scale(1) rotate(0deg); }
-        }
-        @keyframes title-pop {
-          0% { transform: translateY(10px); opacity: 0; }
-          60%{ transform: translateY(0); opacity: 1;}
-          100%{ transform: translateY(0); opacity: 1;}
-        }
-        @keyframes subtitle-pop {
-          0% { transform: translateY(8px); opacity: 0; }
-          100%{ transform: translateY(0); opacity: 1;}
-        }
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        .animate-wave{ animation: wave 1200ms ease-out forwards; }
-        .animate-spark{ animation: spark 1100ms ease-out infinite; }
-        .animate-chest-pop{ animation: chest-pop 680ms cubic-bezier(.2,.7,.2,1.1) both; }
-        .animate-title-pop{ animation: title-pop 520ms ease both; }
-        .animate-subtitle-pop{ animation: subtitle-pop 640ms ease .06s both; }
-        .animate-spin-slow{ animation: spin-slow 8s linear infinite; }
-        .animate-pulse-slow{ animation: pulse 2.5s ease-in-out infinite; }
-        @keyframes pulse {
-          0%,100% { opacity: .35; }
-          50%     { opacity: .15; }
+        @keyframes fx-flash { 0%{opacity:0} 12%{opacity:.95} 100%{opacity:0} }
+        .animate-fx-flash{animation:fx-flash .18s ease-out both}
+
+        @keyframes fx-pop { 0%{transform:translateY(8px) scale(.92);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
+        @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0} 100%{transform:translateY(0);opacity:1} }
+        .animate-fx-pop{animation:fx-pop .28s ease both}
+        .animate-fx-pop-delayed{animation:fx-pop-delayed .4s ease .08s both}
+
+        @keyframes fx-rays-spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+        .animate-fx-rays{animation:fx-rays-spin 1.8s linear both}
+
+        @keyframes fx-wave { 0%{transform:scale(.6);opacity:.0;filter:blur(6px)} 30%{opacity:.7} 100%{transform:scale(1.35);opacity:0;filter:blur(10px)} }
+        .animate-fx-wave{animation:fx-wave 1.1s ease-out both}
+        .animate-fx-wave-del2{animation:fx-wave 1.2s ease-out .06s both}
+        .animate-fx-wave-del3{animation:fx-wave 1.35s ease-out .12s both}
+
+        @keyframes fx-glint { 0%{transform:scale(.9);opacity:.0} 40%{opacity:.5} 100%{transform:scale(1.1);opacity:0} }
+        .animate-fx-glint{animation:fx-glint 1.2s ease-out .05s both}
+
+        @keyframes fx-spark { 0%{transform:translate(0,0) scale(.5);opacity:0} 12%{opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0} }
+
+        @keyframes fx-confetti {
+          0%{ transform:translateX(calc(var(--x))) translateY(-20px) rotate(0deg); opacity:0 }
+          10%{ opacity:1 }
+          100%{ transform:translateX(calc(var(--x) * 1.2)) translateY(260px) rotate(var(--rot)); opacity:0 }
         }
       `}</style>
     </div>
   );
 }
 
-function PurchaseRarityFX({
-  open, rarityCode, rarityName, onClose, durationMs = 2400,
-}: {
-  open:boolean; rarityCode:string; rarityName:string; onClose:()=>void; durationMs?:number;
-}) {
+function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{ open:boolean; rarityCode:string; rarityName:string; onClose:()=>void; }) {
   const pal = rarityPalette[toRarity(rarityCode)];
-  const badge = badgeSrcFromCode(rarityCode);
   return (
     <FXOverlay
-      open={open} onClose={onClose} durationMs={durationMs}
-      palette={pal}
-      title={rarityName.toUpperCase()}
-      subtitle="Rarity Ditemukan!"
-      chestSrc="/fantasy/chest/chest_closed.svg"
-      showBadge={badge}
+      open={open} onClose={onClose} palette={pal}
+      title={rarityName.toUpperCase()} subtitle="Rarity Ditemukan!"
+      chestSrc="/fantasy/chest/chest_closed.svg" showBadge={badgeSrcFromCode(rarityCode)} variant="purchase"
     />
   );
 }
-
-function OpenRewardFX({
-  open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose, durationMs = 2400,
-}: {
-  open:boolean; rarityCode:string; rarityName:string; rewardLabel:string; rewardType:string; rewardAmount:number|null; onClose:()=>void; durationMs?:number;
-}) {
+function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose }:{ open:boolean; rarityCode:string; rarityName:string; rewardLabel:string; rewardType:string; rewardAmount:number|null; onClose:()=>void; }) {
   const pal = rarityPalette[toRarity(rarityCode)];
   const value = rewardType === "CASH" ? `+${formatIDR(rewardAmount)} saldo` : rewardLabel;
-  const badge = badgeSrcFromCode(rarityCode);
   return (
     <FXOverlay
-      open={open} onClose={onClose} durationMs={durationMs}
-      palette={pal}
-      title={rewardLabel}
-      subtitle={`Hadiah • ${rarityName} • ${value}`}
-      chestSrc="/fantasy/chest/chest_open.svg"
-      showBadge={badge}
+      open={open} onClose={onClose} palette={pal}
+      title={rewardLabel} subtitle={`Hadiah • ${rarityName} • ${value}`}
+      chestSrc="/fantasy/chest/chest_open.svg" showBadge={badgeSrcFromCode(rarityCode)} variant="open"
     />
   );
 }
@@ -323,9 +329,7 @@ export default function MemberHomePage() {
   const [lastPurchase, setLastPurchase] = useState<PurchaseResult | null>(null);
   const [lastOpened, setLastOpened] = useState<OpenBoxResult | null>(null);
 
-  const [rarityMap, setRarityMap] = useState<
-    Record<string, { code: string; name: string; color_key: string; sort_order?: number }>
-  >({});
+  const [rarityMap, setRarityMap] = useState< Record<string, { code: string; name: string; color_key: string; sort_order?: number }> >({});
 
   // sfx
   const sfxClick = useRef<HTMLAudioElement | null>(null);
@@ -340,10 +344,10 @@ export default function MemberHomePage() {
     sfxReveal.current = new Audio("/fantasy/sfx/reveal_burst.wav");
     sfxCoin.current = new Audio("/fantasy/sfx/coin_sparkle.wav");
     sfxError.current = new Audio("/fantasy/sfx/error_buzz.wav");
+    // kecilkan sedikit volume biar elegan
+    [sfxWhoosh, sfxReveal, sfxCoin].forEach(ref => { if (ref.current) ref.current.volume = 0.85; });
   }, []);
-  const play = (ref: React.MutableRefObject<HTMLAudioElement | null>) => {
-    try { ref.current?.play().catch(()=>{}); } catch {}
-  };
+  const play = (ref: React.MutableRefObject<HTMLAudioElement | null>) => { try { ref.current?.play().catch(()=>{}); } catch {} };
 
   // auth & profile
   useEffect(() => {
@@ -362,15 +366,13 @@ export default function MemberHomePage() {
     return () => { alive = false; };
   }, [router]);
 
-  // rarity map (with sort_order)
+  // rarity map
   useEffect(() => {
     let alive = true;
     (async () => {
       const { data, error } = await supabase.from("box_rarities").select("id, code, name, color_key, sort_order");
       if (!error && data && alive) {
-        const map = Object.fromEntries(
-          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key, sort_order: (r as any).sort_order ?? 0 }])
-        );
+        const map = Object.fromEntries(data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key, sort_order: (r as any).sort_order ?? 0 }]));
         setRarityMap(map);
       }
     })();
@@ -405,14 +407,12 @@ export default function MemberHomePage() {
     if (!profile) return;
     setInfoMessage(null); setInfoType(null);
     play(sfxClick);
-
     const { data, error } = await supabase.rpc("purchase_box", { p_credit_tier: tier });
     if (error || !data || !Array.isArray(data) || data.length === 0) {
       setInfoType("error"); setInfoMessage(error?.message || "Gagal membeli box."); play(sfxError); return;
     }
     const result = data[0] as PurchaseResult;
 
-    // update balance
     if (typeof result.credits_after === "number") {
       setProfile(p => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
     } else {
@@ -424,8 +424,7 @@ export default function MemberHomePage() {
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
 
-    // jangan blok efek
-    reloadInventory(profile.id);
+    await reloadInventory(profile.id);
   };
 
   // open
@@ -445,13 +444,7 @@ export default function MemberHomePage() {
     play(sfxReveal);
     if (result.reward_type === "CASH") play(sfxCoin);
 
-    setFxOpen({
-      rarity_code: result.rarity_code,
-      rarity_name: result.rarity_name,
-      reward_label: result.reward_label,
-      reward_type: result.reward_type,
-      reward_amount: result.reward_amount ?? null,
-    });
+    setFxOpen({ rarity_code: result.rarity_code, rarity_name: result.rarity_name, reward_label: result.reward_label, reward_type: result.reward_type, reward_amount: result.reward_amount ?? null });
 
     setInventory(prev => prev.filter(i => i.id !== box.id));
     if (typeof result.credits_after === "number") {
@@ -477,7 +470,7 @@ export default function MemberHomePage() {
       const rar = rarityMap[(r as any).rarity_id] || { code:"?", name:"?", color_key:"", sort_order: 0 };
       return { code: rar.code, name: rar.name, color_key: rar.color_key, prob: (r as any).gimmick_probability ?? 0, sort: rar.sort_order ?? 0 };
     })
-    // urut umum → langka (rarest di bawah)
+    // urut: paling umum di atas → paling langka paling bawah
     .sort((a,b) => (a.sort ?? 0) - (b.sort ?? 0));
     setTierInfo({ open:true, loading:false, tier, rows });
   };
@@ -502,50 +495,35 @@ export default function MemberHomePage() {
   /* ========= UI ========= */
   if (loading) {
     return (
-      <main className="min-h-screen bg-black text-slate-100 p-6">
-        <div className="max-w-5xl mx-auto">Memuat...</div>
-      </main>
+      <main className="min-h-screen bg-black text-slate-100 p-6"><div className="max-w-5xl mx-auto">Memuat...</div></main>
     );
   }
   if (!profile) {
     return (
-      <main className="min-h-screen bg-black text-slate-100 p-6">
-        <div className="max-w-5xl mx-auto">Tidak bisa membaca profil.</div>
-      </main>
+      <main className="min-h-screen bg-black text-slate-100 p-6"><div className="max-w-5xl mx-auto">Tidak bisa membaca profil.</div></main>
     );
   }
 
   // SWAP warna Tier-2 dan Tier-3
   const tierStyles: Record<number, { frameFrom: string; frameTo: string; btnFrom: string; btnTo: string; ribbon: string; }> = {
     1: { frameFrom: "#8b5cf2AA", frameTo: "#22d3ee44", btnFrom: "#8b5cf2", btnTo: "#a78bfa", ribbon: "from-violet-300/90 to-cyan-300/80" },
-    2: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" }, // ex tier-3
-    3: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" }, // ex tier-2
+    2: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" },
+    3: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" },
   };
 
   return (
     <main
       className="relative min-h-screen text-slate-100"
-      style={{
-        backgroundImage: "url('/fantasy/bg.jpg')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+      style={{ backgroundImage: "url('/fantasy/bg.jpg')", backgroundSize: "cover", backgroundPosition: "center" }}
     >
-      {/* overlay ringan supaya bg.jpg terlihat */}
-      <div className="absolute inset-0 pointer-events-none"
-           style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
+      {/* overlay dipisah supaya bg.jpg terlihat & ringan */}
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[10px] tracking-[0.28em] uppercase text-slate-300/80">MEMBER SITE</div>
-            <h1
-              className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent
-                         [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]"
-              style={{
-                backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)",
-              }}
-            >
+            <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
               MYSTERY BOX
             </h1>
             <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
@@ -557,8 +535,7 @@ export default function MemberHomePage() {
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
-            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
-                    className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
+            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
           </div>
         </div>
 
@@ -567,12 +544,10 @@ export default function MemberHomePage() {
           {[1, 2, 3].map((tier) => {
             const s = tierStyles[tier];
             return (
-              <div key={tier} className="group relative rounded-2xl p-[2px]"
-                   style={{ background: `linear-gradient(180deg, ${s.frameFrom}, ${s.frameTo})` }}>
+              <div key={tier} className="group relative rounded-2xl p-[2px]" style={{ background: `linear-gradient(180deg, ${s.frameFrom}, ${s.frameTo})` }}>
                 <div className="rounded-2xl border border-slate-700/60 bg-slate-950/85 p-4">
                   {/* Ribbon */}
-                  <div className={`inline-flex items-center gap-1 rounded-full text-[10px] px-2 py-[2px] font-semibold
-                                  bg-gradient-to-r ${s.ribbon} text-slate-900`}>
+                  <div className={`inline-flex items-center gap-1 rounded-full text-[10px] px-2 py-[2px] font-semibold bg-gradient-to-r ${s.ribbon} text-slate-900`}>
                     {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                   </div>
 
@@ -583,20 +558,14 @@ export default function MemberHomePage() {
                     {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
                   </p>
 
-                  {/* Ikon BOX di tengah – klik untuk Drop Info tier */}
+                  {/* Ikon BOX (center) – klik untuk Drop Info tier */}
                   <div className="mt-4 flex justify-center">
-                    <button type="button" aria-label="Lihat Drop Info"
-                      onClick={() => loadTierInfo(tier)}
-                      className="rounded-2xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 hover:bg-slate-800/80">
+                    <button type="button" aria-label="Lihat Drop Info" onClick={() => loadTierInfo(tier)} className="rounded-2xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 hover:bg-slate-800/80">
                       <img src="/fantasy/chest/chest_closed.svg" alt="" className="h-14 md:h-16 will-change-transform" />
                     </button>
                   </div>
 
-                  <button
-                    onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }}
-                    className="mt-4 w-full rounded-full text-black font-semibold py-2"
-                    style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}
-                  >
+                  <button onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }} className="mt-4 w-full rounded-full text-black font-semibold py-2" style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}>
                     Beli Box {tier} Credit
                   </button>
                 </div>
@@ -607,9 +576,7 @@ export default function MemberHomePage() {
 
         {/* Only error notification */}
         {infoType === "error" && infoMessage && (
-          <div className="mt-4 rounded-lg px-3 py-2 text-sm bg-rose-500/10 border border-rose-500/30 text-rose-200">
-            {infoMessage}
-          </div>
+          <div className="mt-4 rounded-lg px-3 py-2 text-sm bg-rose-500/10 border border-rose-500/30 text-rose-200">{infoMessage}</div>
         )}
 
         {/* Inventory */}
@@ -636,24 +603,13 @@ export default function MemberHomePage() {
                         Box {box.credit_tier} Credit
                         {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
                       </p>
-                      <p className="text-[11px] text-slate-400">
-                        Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span>
-                      </p>
+                      <p className="text-[11px] text-slate-400">Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span></p>
                     </div>
                     <div className="shrink-0 flex items-center">
                       {box.rarity_id && (
-                        <button
-                          onClick={() => loadRarityInfo(box.rarity_id!)}
-                          className="mr-2 rounded-full border border-slate-600/60 px-3 py-1 text-[11px] hover:bg-slate-800/50"
-                        >
-                          Info
-                        </button>
+                        <button onClick={() => loadRarityInfo(box.rarity_id!)} className="mr-2 rounded-full border border-slate-600/60 px-3 py-1 text-[11px] hover:bg-slate-800/50">Info</button>
                       )}
-                      <button
-                        onClick={() => handleOpenBox(box)}
-                        disabled={openingId === box.id}
-                        className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
-                      >
+                      <button onClick={() => handleOpenBox(box)} disabled={openingId === box.id} className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60">
                         {openingId === box.id ? "Membuka…" : "Buka Box"}
                       </button>
                     </div>
@@ -670,15 +626,9 @@ export default function MemberHomePage() {
             <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
             {lastPurchase ? (
               <div className="text-xs text-slate-300">
-                Box {lastPurchase.credit_tier} credit, rarity{" "}
-                <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
-                <div className="mt-1 text-slate-400">
-                  Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
-                  setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span>
-                </div>
-                <div className="text-slate-400">
-                  Box ini bisa dibuka sampai <span className="font-medium">{formatDateTime(lastPurchase.expires_at)}</span>.
-                </div>
+                Box {lastPurchase.credit_tier} credit, rarity <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
+                <div className="mt-1 text-slate-400">Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> • setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span></div>
+                <div className="text-slate-400">Box ini bisa dibuka sampai <span className="font-medium">{formatDateTime(lastPurchase.expires_at)}</span>.</div>
               </div>
             ) : (
               <div className="text-xs text-slate-400">—</div>
@@ -687,10 +637,7 @@ export default function MemberHomePage() {
             {lastOpened && (
               <>
                 <div className="mt-4 text-sm font-semibold text-slate-200">Box Terakhir Dibuka</div>
-                <div className="text-xs text-slate-300">
-                  Rarity {lastOpened.rarity_name} • Hadiah <span className="font-semibold">{lastOpened.reward_label}</span>
-                  {lastOpened.reward_type === "CASH" && <> (+{formatIDR(lastOpened.reward_amount)} saldo)</>}
-                </div>
+                <div className="text-xs text-slate-300">Rarity {lastOpened.rarity_name} • Hadiah <span className="font-semibold">{lastOpened.reward_label}</span>{lastOpened.reward_type === "CASH" && <> (+{formatIDR(lastOpened.reward_amount)} saldo)</>}</div>
               </>
             )}
           </div>
@@ -707,9 +654,7 @@ export default function MemberHomePage() {
           <ul className="space-y-2">
             {tierInfo.rows.map((r, idx) => (
               <li key={idx} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={rarityBadgeClasses(r.color_key)}>{r.name}</span>
-                </div>
+                <div className="flex items-center gap-2"><span className={rarityBadgeClasses(r.color_key)}>{r.name}</span></div>
                 <div className="font-semibold">{r.prob}%</div>
               </li>
             ))}
@@ -737,23 +682,8 @@ export default function MemberHomePage() {
       </Modal>
 
       {/* FX Overlays */}
-      <PurchaseRarityFX
-        open={!!fxPurchase}
-        rarityCode={fxPurchase?.code ?? ""}
-        rarityName={fxPurchase?.name ?? ""}
-        onClose={() => setFxPurchase(null)}
-        durationMs={2400}
-      />
-      <OpenRewardFX
-        open={!!fxOpen}
-        rarityCode={fxOpen?.rarity_code ?? ""}
-        rarityName={fxOpen?.rarity_name ?? ""}
-        rewardLabel={fxOpen?.reward_label ?? ""}
-        rewardType={fxOpen?.reward_type ?? ""}
-        rewardAmount={fxOpen?.reward_amount ?? null}
-        onClose={() => setFxOpen(null)}
-        durationMs={2400}
-      />
+      <PurchaseRarityFX open={!!fxPurchase} rarityCode={fxPurchase?.code ?? ""} rarityName={fxPurchase?.name ?? ""} onClose={() => setFxPurchase(null)} />
+      <OpenRewardFX open={!!fxOpen} rarityCode={fxOpen?.rarity_code ?? ""} rarityName={fxOpen?.rarity_name ?? ""} rewardLabel={fxOpen?.reward_label ?? ""} rewardType={fxOpen?.reward_type ?? ""} rewardAmount={fxOpen?.reward_amount ?? null} onClose={() => setFxOpen(null)} />
 
       {/* shimmer keyframes */}
       <style jsx global>{`
