@@ -690,7 +690,7 @@ export default function PanelBoxesPage() {
           </div>
           {profile && profile.role === "CS" && (
             <span className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-300">
-              Mode baca saja (role CS)
+              Mode baca
             </span>
           )}
         </div>
