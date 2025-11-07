@@ -169,11 +169,6 @@ export default function PanelDashboardPage() {
                 <p className="text-slate-400">Tenant belum terhubung.</p>
               )}
             </div>
-
-            <p className="text-xs text-slate-500 pt-2">
-              Setelah ini, kita akan tambahkan menu Panel (member, credit,
-              history box, dll.) di sekitar header ini.
-            </p>
           </div>
         )}
       </div>
