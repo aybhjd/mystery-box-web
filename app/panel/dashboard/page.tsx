@@ -153,7 +153,7 @@ export default function PanelDashboardPage() {
 
             <div className="pt-2 border-t border-slate-700/60">
               <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">
-                Tenant
+                Web
               </p>
               {profile.tenant ? (
                 <>
