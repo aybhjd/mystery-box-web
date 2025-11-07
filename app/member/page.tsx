@@ -144,7 +144,7 @@ function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadg
   useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div className="fixed inset-0 z-[99]">
       <div className="absolute inset-0"
         style={{
           background:
@@ -322,7 +322,7 @@ export default function MemberHomePage() {
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
 
-    await reloadInventory(profile.id);
+    reloadInventory(profile.id);
   };
 
   // open
@@ -532,7 +532,7 @@ export default function MemberHomePage() {
                   <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
-                        Box {box.credit_tier} Credit
+                        Box {box.credit_tier} Token
                         {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
                       </p>
                       <p className="text-[11px] text-slate-400">
@@ -597,7 +597,7 @@ export default function MemberHomePage() {
       </div>
 
       {/* MODALS: Drop Info */}
-      <Modal open={tierInfo.open} onClose={() => setTierInfo({open:false})} title={`Drop Info • Box ${tierInfo.tier ?? ""} Credit`}>
+      <Modal open={tierInfo.open} onClose={() => setTierInfo({open:false})} title={`Drop Info • Box ${tierInfo.tier ?? ""} Token`}>
         {tierInfo.loading ? (
           <div className="text-slate-400">Memuat…</div>
         ) : (!tierInfo.rows || tierInfo.rows.length === 0) ? (
@@ -641,6 +641,7 @@ export default function MemberHomePage() {
         rarityCode={fxPurchase?.code ?? ""}
         rarityName={fxPurchase?.name ?? ""}
         onClose={() => setFxPurchase(null)}
+        durationMs={2200}
       />
       <OpenRewardFX
         open={!!fxOpen}
@@ -650,6 +651,7 @@ export default function MemberHomePage() {
         rewardType={fxOpen?.reward_type ?? ""}
         rewardAmount={fxOpen?.reward_amount ?? null}
         onClose={() => setFxOpen(null)}
+        durationMs={2200}
       />
 
       {/* shimmer keyframes */}
