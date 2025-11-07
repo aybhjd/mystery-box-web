@@ -240,8 +240,9 @@ function FXOverlay({
         <div className={`relative ${isTease ? 'animate-fx-pulse' : ''}`}>
           <img
             src={isReveal ? chestRevealSrc : chestNeutralSrc}
-            alt=""
-            className={`w-[40vmin] max-w-[440px] will-change-transform ${isReveal ? 'animate-fx-pop' : isTease ? 'opacity-95' : 'opacity-100'} ${isShaking && !isReveal ? 'animate-fx-shake' : ''}`}
+            className={`w-[40vmin] max-w-[440px] chest-origin will-change-transform
+              ${isReveal ? 'animate-fx-pop' : isTease ? 'opacity-95' : 'opacity-100'}
+              ${isShaking && !isReveal ? 'animate-fx-shake' : ''}`}
           />
           {/* aura ring tipis saat tease */}
           {isTease && (
@@ -353,17 +354,25 @@ function FXOverlay({
 
         /* >>> Goyang sebelum reveal */
         @keyframes fx-shake {
-          0%   { transform: translate(0,0) rotate(0deg); }
-          12.5%{ transform: translate(-2px,1px) rotate(-1.5deg); }
-          25%  { transform: translate(2px,-1px) rotate(1.2deg); }
-          37.5%{ transform: translate(-2px,1px) rotate(-1deg); }
-          50%  { transform: translate(2px,0px) rotate(0.8deg); }
-          62.5%{ transform: translate(-1px,0px) rotate(-0.6deg); }
-          75%  { transform: translate(1px,0px) rotate(0.4deg); }
-          87.5%{ transform: translate(-.5px,0px) rotate(-0.2deg); }
-          100% { transform: translate(0,0) rotate(0deg); }
+          0%   { transform: translate3d(0,0,0) rotate(0) scale(1); }
+          10%  { transform: translate3d(-8px, 2px,0) rotate(-4deg) scale(1.01); }
+          20%  { transform: translate3d(10px,-3px,0) rotate( 3deg); }
+          30%  { transform: translate3d(-10px,3px,0) rotate(-3.5deg); }
+          40%  { transform: translate3d( 9px,-2px,0) rotate( 3deg); }
+          50%  { transform: translate3d(-8px, 2px,0) rotate(-2.5deg); }
+          60%  { transform: translate3d( 6px,-2px,0) rotate( 2deg); }
+          70%  { transform: translate3d(-5px, 1px,0) rotate(-1.5deg); }
+          80%  { transform: translate3d( 4px,-1px,0) rotate( 1deg); }
+          90%  { transform: translate3d(-2px, 0px,0) rotate(-.5deg); }
+          100% { transform: translate3d(0,0,0) rotate(0) scale(1); }
         }
-        .animate-fx-shake{ animation: fx-shake .8s ease-in-out both; }
+        .animate-fx-shake{
+          animation: fx-shake .65s cubic-bezier(.36,.07,.19,.97) both;
+          animation-iteration-count: 2; /* goyang 2x */
+          will-change: transform;
+        }
+
+        .chest-origin { transform-origin: 50% 85%; backface-visibility: hidden; }
 
         @keyframes fx-spark { 0%{transform:translate(0,0) scale(.5);opacity:0} 12%{opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0} }
 
