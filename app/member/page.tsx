@@ -122,7 +122,7 @@ function badgeSrcFromCode(code: string) {
 }
 
 /* =========================
-   FX Overlay (wired to assets & SFX)
+   FX Overlay (assets & SFX)
 ========================= */
 type FXBaseProps = {
   open: boolean;
@@ -132,8 +132,8 @@ type FXBaseProps = {
   subtitle?: string;
   rainbowRing?: boolean;
   durationMs?: number;
-  chestSrc: string;      // /fantasy/chest/chest_closed.svg | chest_open.svg
-  showBadge?: string;    // /fantasy/icons/badge_*.svg
+  chestSrc: string;
+  showBadge?: string;
 };
 
 function FXOverlay({
@@ -291,7 +291,26 @@ function OpenRewardFX({
 }
 
 /* =========================
-   Page (with Fantasy-styled header)
+   Aurora BG + shimmer
+========================= */
+function AuroraLayer() {
+  return (
+    <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* aurora blobs */}
+      <div className="absolute -top-28 -left-32 w-[52rem] h-[52rem] rounded-full blur-[140px] opacity-50"
+           style={{ background: "radial-gradient(closest-side, #7c3aed66, transparent 70%)" }} />
+      <div className="absolute -top-24 right-[-8rem] w-[46rem] h-[46rem] rounded-full blur-[140px] opacity-45"
+           style={{ background: "radial-gradient(closest-side, #22d3ee55, transparent 70%)" }} />
+      <div className="absolute bottom-[-12rem] left-1/3 w-[56rem] h-[56rem] rounded-full blur-[150px] opacity-40"
+           style={{ background: "radial-gradient(closest-side, #f59e0b55, transparent 70%)" }} />
+      {/* faint star grid */}
+      <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_1px)] [background-size:24px_24px]" />
+    </div>
+  );
+}
+
+/* =========================
+   Page
 ========================= */
 export default function MemberHomePage() {
   const router = useRouter();
@@ -310,10 +329,9 @@ export default function MemberHomePage() {
   const [lastPurchase, setLastPurchase] = useState<PurchaseResult | null>(null);
   const [lastOpened, setLastOpened] = useState<OpenBoxResult | null>(null);
 
-  // rarity map for inventory badge
   const [rarityMap, setRarityMap] = useState<Record<string, { code: string; name: string; color_key: string }>>({});
 
-  // SFX refs
+  // SFX
   const sfxClick = useRef<HTMLAudioElement | null>(null);
   const sfxWhoosh = useRef<HTMLAudioElement | null>(null);
   const sfxRumble = useRef<HTMLAudioElement | null>(null);
@@ -390,12 +408,13 @@ export default function MemberHomePage() {
 
   useEffect(() => { if (profile?.id) reloadInventory(profile.id); }, [profile?.id]); // eslint-disable-line
 
-  // purchase
+  // overlays
   const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
   const [fxOpen, setFxOpen] = useState<{
     rarity_code: string; rarity_name: string; reward_label: string; reward_type: string; reward_amount: number | null;
   } | null>(null);
 
+  // purchase
   const handlePurchase = async (tier: 1 | 2 | 3) => {
     if (!profile) return;
     setInfoMessage(null); setInfoType(null);
@@ -406,7 +425,6 @@ export default function MemberHomePage() {
     }
     const result = data[0] as PurchaseResult;
 
-    // update credit
     if (typeof result.credits_after === "number") {
       setProfile(p => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
     } else {
@@ -416,7 +434,7 @@ export default function MemberHomePage() {
 
     setLastPurchase(result);
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
-    play(sfxWhoosh); // reveal rarity
+    play(sfxWhoosh);
 
     await reloadInventory(profile.id);
   };
@@ -435,7 +453,6 @@ export default function MemberHomePage() {
     }
     const result = data[0] as OpenBoxResult;
 
-    // FX chain
     play(sfxRumble);
     play(sfxReveal, 250);
     if (result.reward_type === "CASH") play(sfxCoin, 520);
@@ -448,9 +465,7 @@ export default function MemberHomePage() {
       reward_amount: result.reward_amount ?? null,
     });
 
-    // optimistic remove
     setInventory(prev => prev.filter(i => i.id !== box.id));
-
     if (typeof result.credits_after === "number") {
       setProfile(p => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
     }
@@ -473,157 +488,193 @@ export default function MemberHomePage() {
     );
   }
 
+  /* Tier styles for cards */
+  const tierStyles: Record<number, {
+    frameFrom: string; frameTo: string; btnFrom: string; btnTo: string; glow: string; ribbon: string;
+  }> = {
+    1: {
+      frameFrom: "#8b5cf2AA", frameTo: "#22d3ee33",
+      btnFrom: "#8b5cf2", btnTo: "#a78bfa",
+      glow: "shadow-[0_10px_32px_-8px_rgba(139,92,246,.35)]",
+      ribbon: "from-violet-400/80 to-cyan-300/70"
+    },
+    2: {
+      frameFrom: "#22c55eAA", frameTo: "#22d3ee55",
+      btnFrom: "#22c55e", btnTo: "#2dd4bf",
+      glow: "shadow-[0_10px_32px_-8px_rgba(34,197,94,.35)]",
+      ribbon: "from-emerald-300/80 to-teal-300/70"
+    },
+    3: {
+      frameFrom: "#f97316AA", frameTo: "#f59e0b88",
+      btnFrom: "#f97316", btnTo: "#f59e0b",
+      glow: "shadow-[0_10px_32px_-8px_rgba(245,158,11,.40)]",
+      ribbon: "from-amber-300/90 to-pink-300/80"
+    }
+  };
+
   return (
     <main className="relative min-h-screen bg-[radial-gradient(1400px_700px_at_50%_-10%,#0b1220_0%,#090f1a_55%,#070b13_100%)] text-slate-100 overflow-x-hidden">
-      {/* Fantasy aurora & stars */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-24 -left-24 w-[48rem] h-[48rem] rounded-full blur-[120px] opacity-40"
-             style={{ background: "radial-gradient(closest-side, #7c3aed55, transparent 70%)" }} />
-        <div className="absolute -top-20 right-[-6rem] w-[42rem] h-[42rem] rounded-full blur-[120px] opacity-35"
-             style={{ background: "radial-gradient(closest-side, #22d3ee44, transparent 70%)" }} />
-        <div className="absolute bottom-[-10rem] left-1/3 w-[50rem] h-[50rem] rounded-full blur-[140px] opacity-35"
-             style={{ background: "radial-gradient(closest-side, #f59e0b44, transparent 70%)" }} />
-      </div>
+      {/* Aurora (z-0) + content (z-10) supaya pasti terlihat */}
+      <div className="relative">
+        <AuroraLayer />
+        <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-[10px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
 
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* Header (Fantasy-styled) */}
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-[10px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
-            <h1
-              className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent"
-              style={{
-                backgroundImage:
-                  "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%)",
-              }}
-            >
-              MYSTERY BOX
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Masuk ke dunia Fantasy. Buka peti, kejar rare drop, dan kumpulkan hadiahmu.
-            </p>
+              <h1
+                className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent
+                           [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)",
+                }}
+              >
+                MYSTERY BOX
+              </h1>
 
-            {/* Decorative divider */}
-            <div className="mt-4 h-[2px] w-40 rounded-full bg-gradient-to-r from-fuchsia-400/70 via-amber-300/80 to-transparent shadow-[0_0_18px_rgba(249,115,22,.35)]" />
-          </div>
+              <p className="mt-2 text-sm text-slate-300/80">
+                Masuk ke dunia Fantasy. Buka peti, kejar rare drop, dan kumpulkan hadiahmu.
+              </p>
 
-          <div className="flex flex-col items-end gap-2">
-            <div className="text-xs text-slate-400 text-right w-full">Login sebagai</div>
-            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40 backdrop-blur">
-              <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
-              <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
+              <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent shadow-[0_0_18px_rgba(249,115,22,.35)]" />
             </div>
-            <button
-              onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
-              className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
 
-        {/* Buy cards – with light gradient frames */}
-        <div className="grid md:grid-cols-3 gap-4 mt-8">
-          {[1, 2, 3].map((tier) => (
-            <div key={tier} className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-slate-400/20 to-slate-700/10">
-              <div className="rounded-2xl border border-slate-700/60 bg-slate-950/75 p-4 group-hover:shadow-[0_0_0_1px_rgba(167,139,250,.25)] transition-shadow">
-                <div className="text-lg font-semibold">Box {tier} Credit</div>
-                <p className="text-xs text-slate-400 mt-1">
-                  {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
-                  {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
-                  {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
-                </p>
-                <button
-                  onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }}
-                  className="mt-4 w-full rounded-full bg-violet-500/95 hover:bg-violet-400 text-black font-semibold py-2 shadow-[0_8px_24px_-6px_rgba(139,92,246,.45)]"
-                >
-                  Beli Box {tier} Credit
-                </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="text-xs text-slate-400 text-right w-full">Login sebagai</div>
+              <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40 backdrop-blur">
+                <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
+                <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
               </div>
+              <button
+                onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
+                className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50"
+              >
+                Logout
+              </button>
             </div>
-          ))}
-        </div>
-
-        {/* Only error notification (success hidden) */}
-        {infoType === "error" && infoMessage && (
-          <div className="mt-4 rounded-lg px-3 py-2 text-sm bg-rose-500/10 border border-rose-500/30 text-rose-200">
-            {infoMessage}
-          </div>
-        )}
-
-        {/* Inventory */}
-        <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/70 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/70">
-            <div className="text-sm font-semibold text-slate-200">Inventory Box Kamu</div>
-            <div className="text-xs text-slate-400">{inventory.length} box menunggu dibuka</div>
           </div>
 
-          {inventoryLoading ? (
-            <div className="px-4 py-6 text-sm text-slate-400">Memuat inventory…</div>
-          ) : inventoryError ? (
-            <div className="px-4 py-6 text-sm text-rose-300">{inventoryError}</div>
-          ) : inventory.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-slate-400">Belum ada box.</div>
-          ) : (
-            <ul className="divide-y divide-slate-800/70">
-              {inventory.map((box) => {
-                const rar = box.rarity_id ? rarityMap[box.rarity_id] : undefined;
-                return (
-                  <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-900/40">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
-                        Box {box.credit_tier} Credit
-                        {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span>
-                      </p>
+          {/* Cards */}
+          <div className="grid md:grid-cols-3 gap-4 mt-8">
+            {[1, 2, 3].map((tier) => {
+              const s = tierStyles[tier];
+              return (
+                <div key={tier}
+                  className="group relative rounded-2xl p-[2px]"
+                  style={{ background: `linear-gradient(180deg, ${s.frameFrom}, ${s.frameTo})` }}
+                >
+                  <div className="rounded-2xl border border-slate-700/60 bg-slate-950/80 p-4 group-hover:shadow-[0_0_0_1px_rgba(255,255,255,.08)] transition-shadow">
+                    {/* Ribbon */}
+                    <div className={`inline-flex items-center gap-1 rounded-full text-[10px] px-2 py-[2px] font-semibold
+                                    bg-gradient-to-r ${s.ribbon} text-slate-900`}>
+                      {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                     </div>
+
+                    <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
+                      {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
+                      {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
+                    </p>
+
                     <button
-                      onClick={() => handleOpenBox(box)}
-                      disabled={openingId === box.id}
-                      className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60 shadow-[0_8px_24px_-6px_rgba(245,158,11,.45)]"
+                      onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }}
+                      className={`mt-4 w-full rounded-full text-black font-semibold py-2 ${s.glow}`}
+                      style={{
+                        background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})`,
+                      }}
                     >
-                      {openingId === box.id ? "Membuka…" : "Buka Box"}
+                      Beli Box {tier} Credit
                     </button>
-                  </li>
-                );
-              })}
-            </ul>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Only error notification */}
+          {infoType === "error" && infoMessage && (
+            <div className="mt-4 rounded-lg px-3 py-2 text-sm bg-rose-500/10 border border-rose-500/30 text-rose-200">
+              {infoMessage}
+            </div>
+          )}
+
+          {/* Inventory */}
+          <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/70 backdrop-blur">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/70">
+              <div className="text-sm font-semibold text-slate-200">Inventory Box Kamu</div>
+              <div className="text-xs text-slate-400">{inventory.length} box menunggu dibuka</div>
+            </div>
+
+            {inventoryLoading ? (
+              <div className="px-4 py-6 text-sm text-slate-400">Memuat inventory…</div>
+            ) : inventoryError ? (
+              <div className="px-4 py-6 text-sm text-rose-300">{inventoryError}</div>
+            ) : inventory.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-slate-400">Belum ada box.</div>
+            ) : (
+              <ul className="divide-y divide-slate-800/70">
+                {inventory.map((box) => {
+                  const rar = box.rarity_id ? rarityMap[box.rarity_id] : undefined;
+                  return (
+                    <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-900/40">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
+                          Box {box.credit_tier} Credit
+                          {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span>
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleOpenBox(box)}
+                        disabled={openingId === box.id}
+                        className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60 shadow-[0_8px_24px_-6px_rgba(245,158,11,.45)]"
+                      >
+                        {openingId === box.id ? "Membuka…" : "Buka Box"}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Pembelian Terakhir */}
+          {(lastPurchase || lastOpened) && (
+            <div className="mt-6 rounded-2xl border border-slate-700/70 bg-slate-950/70 p-4">
+              <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
+              {lastPurchase ? (
+                <div className="text-xs text-slate-300">
+                  Box {lastPurchase.credit_tier} credit, rarity{" "}
+                  <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
+                  <div className="mt-1 text-slate-400">
+                    Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
+                    setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span>
+                  </div>
+                  <div className="text-slate-400">
+                    Box ini bisa dibuka sampai <span className="font-medium">{formatDateTime(lastPurchase.expires_at)}</span>.
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400">—</div>
+              )}
+
+              {lastOpened && (
+                <>
+                  <div className="mt-4 text-sm font-semibold text-slate-200">Box Terakhir Dibuka</div>
+                  <div className="text-xs text-slate-300">
+                    Rarity {lastOpened.rarity_name} • Hadiah <span className="font-semibold">{lastOpened.reward_label}</span>
+                    {lastOpened.reward_type === "CASH" && <> (+{formatIDR(lastOpened.reward_amount)} saldo)</>}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
-
-        {/* Pembelian Terakhir */}
-        {(lastPurchase || lastOpened) && (
-          <div className="mt-6 rounded-2xl border border-slate-700/70 bg-slate-950/70 p-4">
-            <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
-            {lastPurchase ? (
-              <div className="text-xs text-slate-300">
-                Box {lastPurchase.credit_tier} credit, rarity{" "}
-                <span className="font-semibold">{lastPurchase.rarity_name} ({lastPurchase.rarity_code})</span>.
-                <div className="mt-1 text-slate-400">
-                  Credit sebelum beli: <span className="font-medium">{formatIDR(lastPurchase.credits_before)}</span> •
-                  setelah beli: <span className="font-medium">{formatIDR(lastPurchase.credits_after)}</span>
-                </div>
-                <div className="text-slate-400">
-                  Box ini bisa dibuka sampai <span className="font-medium">{formatDateTime(lastPurchase.expires_at)}</span>.
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-slate-400">—</div>
-            )}
-
-            {lastOpened && (
-              <>
-                <div className="mt-4 text-sm font-semibold text-slate-200">Box Terakhir Dibuka</div>
-                <div className="text-xs text-slate-300">
-                  Rarity {lastOpened.rarity_name} • Hadiah <span className="font-semibold">{lastOpened.reward_label}</span>
-                  {lastOpened.reward_type === "CASH" && <> (+{formatIDR(lastOpened.reward_amount)} saldo)</>}
-                </div>
-              </>
-            )}
-          </div>
-        )}
       </div>
 
       {/* FX Overlays */}
@@ -642,6 +693,14 @@ export default function MemberHomePage() {
         rewardAmount={fxOpen?.reward_amount ?? null}
         onClose={() => setFxOpen(null)}
       />
+
+      {/* shimmer keyframes */}
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </main>
   );
 }
