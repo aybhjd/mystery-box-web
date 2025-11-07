@@ -69,7 +69,6 @@ export default function MemberLoginPage() {
               type="text"
               autoComplete="username"
               className="w-full rounded-xl border border-purple-500/40 bg-slate-950/70 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-memberAccent focus:border-memberAccent"
-              placeholder="hero123"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
@@ -84,7 +83,6 @@ export default function MemberLoginPage() {
               type="password"
               autoComplete="current-password"
               className="w-full rounded-xl border border-purple-500/40 bg-slate-950/70 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-memberAccent focus:border-memberAccent"
-              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -108,15 +106,6 @@ export default function MemberLoginPage() {
         <div className="text-xs text-slate-300/80 text-center space-y-1">
           <p>
             Credit kamu akan dipakai untuk membeli Mystery Box (1 / 2 / 3 credit).
-          </p>
-          <p>
-            Salah portal?{" "}
-            <Link
-              href="/panel/login"
-              className="text-memberAccent hover:underline"
-            >
-              Buka Panel Admin / CS
-            </Link>
           </p>
         </div>
       </div>
