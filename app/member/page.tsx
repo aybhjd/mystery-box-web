@@ -72,7 +72,6 @@ function formatIDR(n?: number | null) {
 function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function rnd(min: number, max: number) { return Math.random() * (max - min) + min; }
 
-
 type RarityKey = "COMMON" | "RARE" | "EPIC" | "SUPREME" | "LEGENDARY" | "SPECIAL_LEGENDARY";
 
 const rarityPalette: Record<RarityKey, { text: string; from: string; to: string; ring: string }> = {
@@ -127,17 +126,13 @@ function Modal({ open, onClose, title, children, widthClass = "max-w-md" }: { op
 
 /* =========================
    DELUXE FX Overlays (mobile-friendly) — staged suspense
-   Tahapan:
-   0) NEUTRAL  → box biasa, background gelap, tanpa warna
-   1) TEASE    → aura tipis sesuai rarity, pulse pelan, sedikit spark
-   2) REVEAL   → full warna, shockwave, sparks banyak (+confetti untuk OPEN), judul & badge tampil
 ========================= */
 type FXBaseProps = {
   open: boolean; onClose: () => void;
   palette: { text: string; from: string; to: string; ring: string };
   title: string; subtitle?: string;
-  chestNeutralSrc: string;    // ex: closed
-  chestRevealSrc: string;     // ex: open (khusus OPEN) atau tetap closed (PURCHASE)
+  chestNeutralSrc: string;
+  chestRevealSrc: string;
   showBadge?: string;
   variant?: "purchase" | "open";
   stagingDurations?: { neutral: number; tease: number; reveal: number }; // ms per fase
@@ -151,16 +146,26 @@ function FXOverlay({
   const REVEAL_MS  = stagingDurations?.reveal  ?? (variant === "open" ? 950 : 720);
 
   const [phase, setPhase] = useState<0 | 1 | 2>(variant === "open" ? 1 : 0); // 0 neutral, 1 tease, 2 reveal
+  const [isShaking, setIsShaking] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const start = variant === "open" ? 1 : 0;           // buka box: mulai dari TEASE
+    const start = variant === "open" ? 1 : 0; // buka box: mulai dari TEASE
     setPhase(start);
-    const toReveal = variant === "open" ? TEASE_MS      // langsung TEASE → REVEAL
-                                        : NEUTRAL_MS + TEASE_MS;
-    const tNext = setTimeout(() => setPhase(2), toReveal);
+    setIsShaking(false);
+
+    // total waktu menuju REVEAL
+    const toReveal = variant === "open" ? TEASE_MS : NEUTRAL_MS + TEASE_MS;
+
+    // mulai goyang sedikit sebelum REVEAL
+    const SHAKE_MS = 500;
+    const shakeAt = Math.max(0, toReveal - SHAKE_MS);
+
+    const tShake = setTimeout(() => setIsShaking(true), shakeAt);
+    const tNext  = setTimeout(() => setPhase(2), toReveal);
     const tClose = setTimeout(onClose, toReveal + REVEAL_MS);
-    return () => { clearTimeout(tNext); clearTimeout(tClose); };
+
+    return () => { clearTimeout(tShake); clearTimeout(tNext); clearTimeout(tClose); };
   }, [open, variant, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
 
   const isNeutral = phase === 0;
@@ -230,13 +235,13 @@ function FXOverlay({
         </>
       )}
 
-      {/* chest: neutral → glow (pulse) → reveal (bisa open) */}
+      {/* chest: neutral → glow (pulse) → shake → reveal (open) */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className={`relative ${isTease ? 'animate-fx-pulse' : ''}`}>
           <img
             src={isReveal ? chestRevealSrc : chestNeutralSrc}
             alt=""
-            className={`w-[40vmin] max-w-[440px] will-change-transform ${isReveal ? 'animate-fx-pop' : isTease ? 'opacity-95' : 'opacity-100'}`}
+            className={`w-[40vmin] max-w-[440px] will-change-transform ${isReveal ? 'animate-fx-pop' : isTease ? 'opacity-95' : 'opacity-100'} ${isShaking && !isReveal ? 'animate-fx-shake' : ''}`}
           />
           {/* aura ring tipis saat tease */}
           {isTease && (
@@ -248,7 +253,7 @@ function FXOverlay({
         </div>
       </div>
 
-      {/* teks & badge hanya pada reveal */}
+      {/* teks & badge */}
       {variant === "open" && isTease && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="mt-[30vmin] px-4 py-2 rounded-lg bg-black/30 border border-white/10
@@ -271,7 +276,7 @@ function FXOverlay({
         </div>
       )}
 
-      {/* glints: lembut di tease, kuat di reveal */}
+      {/* glints */}
       {!isNeutral && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className={`w-[60vmin] h-[60vmin] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.18)_0%,rgba(255,255,255,0)_60%)] ${isTease ? 'animate-fx-glint-soft' : 'animate-fx-glint'}`} />
@@ -345,6 +350,20 @@ function FXOverlay({
 
         @keyframes fx-pulse { 0%{ transform: scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,.0)) } 50%{ transform: scale(1.02); filter: drop-shadow(0 0 18px rgba(255,255,255,.25)) } 100%{ transform: scale(1) filter: drop-shadow(0 0 0 rgba(255,255,255,.0)) } }
         .animate-fx-pulse{ animation: fx-pulse 860ms ease-in-out infinite }
+
+        /* >>> Goyang sebelum reveal */
+        @keyframes fx-shake {
+          0%   { transform: translate(0,0) rotate(0deg); }
+          12.5%{ transform: translate(-2px,1px) rotate(-1.5deg); }
+          25%  { transform: translate(2px,-1px) rotate(1.2deg); }
+          37.5%{ transform: translate(-2px,1px) rotate(-1deg); }
+          50%  { transform: translate(2px,0px) rotate(0.8deg); }
+          62.5%{ transform: translate(-1px,0px) rotate(-0.6deg); }
+          75%  { transform: translate(1px,0px) rotate(0.4deg); }
+          87.5%{ transform: translate(-.5px,0px) rotate(-0.2deg); }
+          100% { transform: translate(0,0) rotate(0deg); }
+        }
+        .animate-fx-shake{ animation: fx-shake .5s ease-in-out both; }
 
         @keyframes fx-spark { 0%{transform:translate(0,0) scale(.5);opacity:0} 12%{opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0} }
 
@@ -494,8 +513,6 @@ export default function MemberHomePage() {
     setLastPurchase(result);
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
-
-    
   };
 
   // open
