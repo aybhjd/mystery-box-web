@@ -168,6 +168,7 @@ function FXOverlay({
         src="/fantasy/chest/chest_glow.svg"
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-70"
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
       />
       <div className="absolute inset-0 flex items-center justify-center">
         <div
@@ -181,7 +182,12 @@ function FXOverlay({
         />
       </div>
       <div className="absolute inset-0 flex items-center justify-center">
-        <img src={chestSrc} alt="" className="w-[38vmin] max-w-[420px] drop-shadow-[0_0_18px_rgba(0,0,0,.5)] animate-fx-pop" />
+        <img
+          src={chestSrc}
+          alt=""
+          className="w-[38vmin] max-w-[420px] drop-shadow-[0_0_18px_rgba(0,0,0,.5)] animate-fx-pop"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
       </div>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-[24vmin] h-[24vmin] rounded-full bg-white/25 blur-[40px] animate-fx-burst" />
@@ -201,7 +207,12 @@ function FXOverlay({
           )}
           {showBadge && (
             <div className="mt-2 flex items-center justify-center animate-fx-pop-delayed">
-              <img src={showBadge} alt="rarity badge" className="h-8 opacity-90" />
+              <img
+                src={showBadge}
+                alt="rarity badge"
+                className="h-8 opacity-90"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
             </div>
           )}
         </div>
@@ -280,7 +291,7 @@ function OpenRewardFX({
 }
 
 /* =========================
-   Page (baseline UI)
+   Page (with Fantasy-styled header)
 ========================= */
 export default function MemberHomePage() {
   const router = useRouter();
@@ -302,7 +313,7 @@ export default function MemberHomePage() {
   // rarity map for inventory badge
   const [rarityMap, setRarityMap] = useState<Record<string, { code: string; name: string; color_key: string }>>({});
 
-  // SFX refs (diputar saat user klik button → aman untuk autoplay policy)
+  // SFX refs
   const sfxClick = useRef<HTMLAudioElement | null>(null);
   const sfxWhoosh = useRef<HTMLAudioElement | null>(null);
   const sfxRumble = useRef<HTMLAudioElement | null>(null);
@@ -380,6 +391,11 @@ export default function MemberHomePage() {
   useEffect(() => { if (profile?.id) reloadInventory(profile.id); }, [profile?.id]); // eslint-disable-line
 
   // purchase
+  const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
+  const [fxOpen, setFxOpen] = useState<{
+    rarity_code: string; rarity_name: string; reward_label: string; reward_type: string; reward_amount: number | null;
+  } | null>(null);
+
   const handlePurchase = async (tier: 1 | 2 | 3) => {
     if (!profile) return;
     setInfoMessage(null); setInfoType(null);
@@ -406,11 +422,6 @@ export default function MemberHomePage() {
   };
 
   // open
-  const [fxPurchase, setFxPurchase] = useState<{ code: string; name: string } | null>(null);
-  const [fxOpen, setFxOpen] = useState<{
-    rarity_code: string; rarity_name: string; reward_label: string; reward_type: string; reward_amount: number | null;
-  } | null>(null);
-
   const handleOpenBox = async (box: InventoryBox) => {
     if (!profile) return;
     setOpeningId(box.id);
@@ -463,20 +474,42 @@ export default function MemberHomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_50%_-10%,#0f172a_0%,#0b1220_60%,#0b0f1a_100%)] text-slate-100">
+    <main className="relative min-h-screen bg-[radial-gradient(1400px_700px_at_50%_-10%,#0b1220_0%,#090f1a_55%,#070b13_100%)] text-slate-100 overflow-x-hidden">
+      {/* Fantasy aurora & stars */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-24 -left-24 w-[48rem] h-[48rem] rounded-full blur-[120px] opacity-40"
+             style={{ background: "radial-gradient(closest-side, #7c3aed55, transparent 70%)" }} />
+        <div className="absolute -top-20 right-[-6rem] w-[42rem] h-[42rem] rounded-full blur-[120px] opacity-35"
+             style={{ background: "radial-gradient(closest-side, #22d3ee44, transparent 70%)" }} />
+        <div className="absolute bottom-[-10rem] left-1/3 w-[50rem] h-[50rem] rounded-full blur-[140px] opacity-35"
+             style={{ background: "radial-gradient(closest-side, #f59e0b44, transparent 70%)" }} />
+      </div>
+
       <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* Header (baseline) */}
+        {/* Header (Fantasy-styled) */}
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-xs tracking-widest text-slate-400">MEMBER SITE</div>
-            <h1 className="text-2xl md:text-3xl font-extrabold">Masuk ke Dunia Fantasy</h1>
-            <p className="text-sm text-slate-400">
-              Beli mystery box dengan credit kamu. Setiap box punya peluang rarity yang berbeda.
+            <div className="text-[10px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
+            <h1
+              className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%)",
+              }}
+            >
+              MYSTERY BOX
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Masuk ke dunia Fantasy. Buka peti, kejar rare drop, dan kumpulkan hadiahmu.
             </p>
+
+            {/* Decorative divider */}
+            <div className="mt-4 h-[2px] w-40 rounded-full bg-gradient-to-r from-fuchsia-400/70 via-amber-300/80 to-transparent shadow-[0_0_18px_rgba(249,115,22,.35)]" />
           </div>
+
           <div className="flex flex-col items-end gap-2">
-            <div className="text-xs text-slate-400">Login sebagai</div>
-            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60">
+            <div className="text-xs text-slate-400 text-right w-full">Login sebagai</div>
+            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40 backdrop-blur">
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
@@ -489,22 +522,24 @@ export default function MemberHomePage() {
           </div>
         </div>
 
-        {/* Buy cards (baseline) */}
+        {/* Buy cards – with light gradient frames */}
         <div className="grid md:grid-cols-3 gap-4 mt-8">
           {[1, 2, 3].map((tier) => (
-            <div key={tier} className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-4">
-              <div className="text-lg font-semibold">Box {tier} Credit</div>
-              <p className="text-xs text-slate-400 mt-1">
-                {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
-                {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
-                {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
-              </p>
-              <button
-                onClick={() => handlePurchase(tier as 1 | 2 | 3)}
-                className="mt-4 w-full rounded-full bg-violet-500 hover:bg-violet-400 text-black font-semibold py-2"
-              >
-                Beli Box {tier} Credit
-              </button>
+            <div key={tier} className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-slate-400/20 to-slate-700/10">
+              <div className="rounded-2xl border border-slate-700/60 bg-slate-950/75 p-4 group-hover:shadow-[0_0_0_1px_rgba(167,139,250,.25)] transition-shadow">
+                <div className="text-lg font-semibold">Box {tier} Credit</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
+                  {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
+                  {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
+                </p>
+                <button
+                  onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }}
+                  className="mt-4 w-full rounded-full bg-violet-500/95 hover:bg-violet-400 text-black font-semibold py-2 shadow-[0_8px_24px_-6px_rgba(139,92,246,.45)]"
+                >
+                  Beli Box {tier} Credit
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -516,8 +551,8 @@ export default function MemberHomePage() {
           </div>
         )}
 
-        {/* Inventory (baseline + badges) */}
-        <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/70">
+        {/* Inventory */}
+        <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/70 backdrop-blur">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/70">
             <div className="text-sm font-semibold text-slate-200">Inventory Box Kamu</div>
             <div className="text-xs text-slate-400">{inventory.length} box menunggu dibuka</div>
@@ -534,7 +569,7 @@ export default function MemberHomePage() {
               {inventory.map((box) => {
                 const rar = box.rarity_id ? rarityMap[box.rarity_id] : undefined;
                 return (
-                  <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-900/50">
+                  <li key={box.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-900/40">
                     <div>
                       <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
                         Box {box.credit_tier} Credit
@@ -547,7 +582,7 @@ export default function MemberHomePage() {
                     <button
                       onClick={() => handleOpenBox(box)}
                       disabled={openingId === box.id}
-                      className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60"
+                      className="rounded-full bg-amber-500 hover:bg-amber-400 text-black text-[12px] font-semibold px-3 py-1.5 disabled:opacity-60 shadow-[0_8px_24px_-6px_rgba(245,158,11,.45)]"
                     >
                       {openingId === box.id ? "Membuka…" : "Buka Box"}
                     </button>
@@ -558,7 +593,7 @@ export default function MemberHomePage() {
           )}
         </div>
 
-        {/* Pembelian Terakhir (baseline) */}
+        {/* Pembelian Terakhir */}
         {(lastPurchase || lastOpened) && (
           <div className="mt-6 rounded-2xl border border-slate-700/70 bg-slate-950/70 p-4">
             <div className="text-sm font-semibold text-slate-200 mb-2">Pembelian Terakhir</div>
