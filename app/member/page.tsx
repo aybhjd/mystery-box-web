@@ -454,7 +454,7 @@ export default function MemberHomePage() {
     // === BGM (try autoplay) ===
     const bgm = new Audio("/fantasy/music/bgm.mp3");
     bgm.loop = true;
-    const savedVol = Number(localStorage.getItem("bgmVol") ?? "0.18");
+    const savedVol = Number(localStorage.getItem("bgmVol") ?? "0.68");
     bgm.volume = isNaN(savedVol) ? 0.18 : Math.min(1, Math.max(0, savedVol));
     bgm.muted  = localStorage.getItem("bgmMuted") === "1";
     bgmRef.current = bgm;
