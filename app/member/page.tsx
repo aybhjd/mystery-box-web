@@ -150,16 +150,18 @@ function FXOverlay({
   const TEASE_MS   = stagingDurations?.tease   ?? (variant === "open" ? 900 : 820);
   const REVEAL_MS  = stagingDurations?.reveal  ?? (variant === "open" ? 950 : 720);
 
-  const [phase, setPhase] = useState<0 | 1 | 2>(0); // 0 neutral, 1 tease, 2 reveal
+  const [phase, setPhase] = useState<0 | 1 | 2>(variant === "open" ? 1 : 0); // 0 neutral, 1 tease, 2 reveal
 
   useEffect(() => {
     if (!open) return;
-    setPhase(0);
-    const t0 = setTimeout(() => setPhase(1), NEUTRAL_MS);
-    const t1 = setTimeout(() => setPhase(2), NEUTRAL_MS + TEASE_MS);
-    const tC = setTimeout(onClose, NEUTRAL_MS + TEASE_MS + REVEAL_MS);
-    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(tC); };
-  }, [open, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
+    const start = variant === "open" ? 1 : 0;           // buka box: mulai dari TEASE
+    setPhase(start);
+    const toReveal = variant === "open" ? TEASE_MS      // langsung TEASE → REVEAL
+                                        : NEUTRAL_MS + TEASE_MS;
+    const tNext = setTimeout(() => setPhase(2), toReveal);
+    const tClose = setTimeout(onClose, toReveal + REVEAL_MS);
+    return () => { clearTimeout(tNext); clearTimeout(tClose); };
+  }, [open, variant, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
 
   const isNeutral = phase === 0;
   const isTease = phase === 1;
@@ -247,6 +249,14 @@ function FXOverlay({
       </div>
 
       {/* teks & badge hanya pada reveal */}
+      {variant === "open" && isTease && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="mt-[30vmin] px-4 py-2 rounded-lg bg-black/30 border border-white/10
+                          text-slate-200/90 text-sm font-medium animate-fx-suspense">
+            Box Sedang dibuka…
+          </div>
+        </div>
+      )}
       {isReveal && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="mt-[30vmin] px-6 py-4 rounded-2xl text-center">
@@ -310,6 +320,9 @@ function FXOverlay({
       <style jsx global>{`
         @keyframes fx-flash { 0%{opacity:0} 12%{opacity:.95} 100%{opacity:0} }
         .animate-fx-flash{animation:fx-flash .18s ease-out both}
+
+        @keyframes fx-suspense { 0%{opacity:.25} 50%{opacity:1} 100%{opacity:.25} }
+        .animate-fx-suspense{ animation: fx-suspense 1s ease-in-out infinite }
 
         @keyframes fx-pop { 0%{transform:translateY(8px) scale(.92);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0} 100%{transform:translateY(0);opacity:1} }
