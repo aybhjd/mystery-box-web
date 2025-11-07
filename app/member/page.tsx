@@ -361,8 +361,14 @@ export default function MemberHomePage() {
       .eq("is_active", true);
     if (error) { setTierInfo({open:true, tier, rows:[]}); return; }
     const rows = (data ?? []).map(r => {
-      const rar = rarityMap[r.rarity_id] || { code:"?", name:"?", color_key:"", sort_order:999 };
-      return { code: rar.code, name: rar.name, color_key: rar.color_key, prob: (r as any).gimmick_probability ?? 0, sort: rar.sort_order };
+      const rar = rarityMap[(r as any).rarity_id] || { code:"?", name:"?", color_key:"", sort_order: 0 };
+      return {
+        code: rar.code,
+        name: rar.name,
+        color_key: rar.color_key,
+        prob: (r as any).gimmick_probability ?? 0,
+        sort: rar.sort_order ?? 0,
+      };
     });
     // urut dari langka → umum (sort_order makin besar = makin umum di datamu)
     rows.sort((a,b) => (a.sort ?? 0) - (b.sort ?? 0));
@@ -400,7 +406,9 @@ export default function MemberHomePage() {
   const [lastPurchase, setLastPurchase] = useState<PurchaseResult | null>(null);
   const [lastOpened, setLastOpened] = useState<OpenBoxResult | null>(null);
 
-  const [rarityMap, setRarityMap] = useState<Record<string, { code: string; name: string; color_key: string }>>({});
+  const [rarityMap, setRarityMap] = useState<
+    Record<string, { code: string; name: string; color_key: string; sort_order?: number }>
+  >({});
 
   // SFX
   const sfxClick = useRef<HTMLAudioElement | null>(null);
@@ -453,11 +461,17 @@ export default function MemberHomePage() {
       const { data, error } = await supabase
         .from("box_rarities")
         .select("id, code, name, color_key, sort_order");
-      if (!error && data && alive) {
+
+      if (!error && data) {
         const map = Object.fromEntries(
-          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key, sort_order: r.sort_order }])
+          data.map(r => [r.id, {
+            code: r.code,
+            name: r.name,
+            color_key: r.color_key,
+            sort_order: (r as any).sort_order ?? 0
+          }])
         );
-        setRarityMap(map as any);
+        setRarityMap(map);
       }
     })();
     return () => { alive = false; };
