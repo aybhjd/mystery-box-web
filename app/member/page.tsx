@@ -76,9 +76,8 @@ const rarityPalette: Record<RarityKey, { text: string; from: string; to: string;
   RARE: { text: "#cfe8ff", from: "#0f3a7a", to: "#081a3a", ring: "#56ccf2" },
   EPIC: { text: "#f5d0fe", from: "#4a1460", to: "#1a0b2a", ring: "#c471ed" },
   SUPREME: { text: "#fff1b8", from: "#6a5210", to: "#2a2108", ring: "#f7d774" },
-  // Legendary diganti jadi tone merah
-  LEGENDARY: { text: "#fecaca", from: "#7f1d1d", to: "#2a0b0b", ring: "#ef4444" },
-  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#1a1026", to: "#100a1a", ring: "#ffffff" },
+  LEGENDARY: { text: "#fecaca", from: "#7f1d1d", to: "#2a0b0b", ring: "#ef4444" }, // merah
+  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#101426", to: "#0b0d1a", ring: "#ffffff" }, // dasar gelap, nanti raybow
 };
 function toRarity(key: string): RarityKey {
   const k = (key || "").toUpperCase() as RarityKey;
@@ -91,11 +90,9 @@ function rarityBadgeClasses(colorKey?: string) {
     case "blue": return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
     case "purple": return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
     case "yellow": return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
-    // gold → merah (sesuai instruksi baru "Legendary = merah")
-    case "gold": return `${base} text-rose-200 border-rose-400/50 bg-rose-900/25`;
-    // rainbow → badge teks gradasi (hijau → biru → ungu → kuning → merah)
+    case "gold": return `${base} text-rose-200 border-rose-400/50 bg-rose-900/25`; // legendary merah
     case "rainbow":
-      return `${base} border-white/50 bg-slate-900/30 text-transparent bg-clip-text
+      return `${base} border-transparent text-white
               bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]`;
     default: return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
   }
@@ -112,10 +109,7 @@ function Modal({
   open, onClose, title, children, widthClass = "max-w-md"
 }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; widthClass?: string; }) {
   return (
-    <div
-      className={`fixed inset-0 z-[70] transition-opacity duration-150 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
-      aria-hidden={!open}
-    >
+    <div className={`fixed inset-0 z-[80] transition-opacity duration-150 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] ${widthClass}
                        rounded-2xl border border-slate-700/70 bg-slate-950/95 p-4
@@ -133,74 +127,178 @@ function Modal({
 }
 
 /* =========================
-   FX Overlays (mobile-friendly)
+   FX Overlays (wah, mobile-friendly)
 ========================= */
 type FXBaseProps = {
   open: boolean; onClose: () => void;
   palette: { text: string; from: string; to: string; ring: string };
   title: string; subtitle?: string; chestSrc: string; showBadge?: string; durationMs?: number;
 };
-function FXOverlay({ open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 1400 }: FXBaseProps) {
-  useEffect(() => { if (!open) return; const t = setTimeout(onClose, durationMs); return () => clearTimeout(t); }, [open, onClose, durationMs]);
+
+function FXOverlay({
+  open, onClose, palette, title, subtitle, chestSrc, showBadge, durationMs = 2400,
+}: FXBaseProps) {
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(onClose, durationMs);
+    return () => clearTimeout(t);
+  }, [open, onClose, durationMs]);
+
   if (!open) return null;
+
+  // generate sparkle dots once
+  const dots = useMemo(
+    () => new Array(32).fill(0).map((_, i) => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      s: 2 + Math.random() * 4,
+      d: 800 + Math.random() * 1200 + i * 8,
+      o: 0.4 + Math.random() * 0.6,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div className="fixed inset-0 z-[99]">
+      {/* Darken + aurora base */}
       <div className="absolute inset-0"
-        style={{
-          background:
-            `linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,.9)), radial-gradient(800px 400px at 50% 45%, ${palette.from}, ${palette.to} 70%)`
-        }}
-      />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-[64vmin] h-[64vmin] rounded-full border-2 border-white/15" />
+           style={{
+             background:
+               `radial-gradient(900px 480px at 50% 45%, ${palette.from}, transparent 60%),
+                radial-gradient(1200px 640px at 50% 50%, ${palette.to}, rgba(0,0,0,.95))`
+           }} />
+
+      {/* Rotating rays (conic) */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[90vmin] h-[90vmin] rounded-full opacity-[.16] blur-[1px]
+                        animate-spin-slow"
+             style={{
+               background:
+                 "conic-gradient(from 0deg, transparent 0deg, white 30deg, transparent 60deg, transparent 120deg, white 150deg, transparent 180deg, transparent 240deg, white 270deg, transparent 300deg, transparent 360deg)",
+               maskImage:
+                 "radial-gradient(closest-side, black 65%, transparent 66%)",
+             }} />
       </div>
+
+      {/* Shockwave ring */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[8vmin] h-[8vmin] rounded-full border border-white/50 animate-wave" />
+      </div>
+
+      {/* Halo + particles */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[56vmin] h-[56vmin] rounded-full bg-white/10 blur-3xl animate-pulse-slow" />
+      </div>
+      <div className="absolute inset-0 pointer-events-none">
+        {dots.map((p, i) => (
+          <span key={i}
+                className="absolute rounded-full bg-white animate-spark"
+                style={{
+                  left: p.left, top: p.top, width: p.s, height: p.s,
+                  opacity: p.o, animationDuration: `${p.d}ms`
+                }} />
+        ))}
+      </div>
+
+      {/* Chest & text */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <img src={chestSrc} alt="" className="w-[38vmin] max-w-[420px] animate-fx-pop will-change-transform" />
+        <img src={chestSrc} alt="" className="w-[40vmin] max-w-[420px] drop-shadow-[0_0_24px_rgba(255,255,255,.25)] animate-chest-pop will-change-transform" />
       </div>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="mt-[28vmin] px-6 py-4 rounded-2xl text-center">
-          <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-fx-pop" style={{ color: palette.text }}>
+          <div className="text-4xl md:text-5xl font-extrabold tracking-wide animate-title-pop" style={{ color: palette.text }}>
             {title}
           </div>
-          {subtitle && <div className="mt-1 text-base md:text-lg text-slate-200/90 animate-fx-pop-delayed">{subtitle}</div>}
+          {subtitle && <div className="mt-2 text-base md:text-lg text-slate-100/95 animate-subtitle-pop">{subtitle}</div>}
           {showBadge && (
-            <div className="mt-2 flex items-center justify-center animate-fx-pop-delayed">
-              <img src={showBadge} alt="badge" className="h-8 opacity-90" />
+            <div className="mt-3 flex items-center justify-center animate-subtitle-pop">
+              <img src={showBadge} alt="badge" className="h-8 opacity-95" />
             </div>
           )}
         </div>
       </div>
+
       <style jsx global>{`
-        @keyframes fx-pop { 0%{transform:translateY(8px) scale(.98);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
-        @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0} 100%{transform:translateY(0);opacity:1} }
-        .animate-fx-pop{animation:fx-pop .35s ease both}
-        .animate-fx-pop-delayed{animation:fx-pop-delayed .45s ease .1s both}
+        @keyframes wave {
+          0%   { transform: scale(1); opacity: .75; }
+          70%  { transform: scale(18); opacity: 0; }
+          100% { transform: scale(18); opacity: 0; }
+        }
+        @keyframes spark {
+          0%   { transform: translateY(0) scale(1); opacity: .7; }
+          100% { transform: translateY(-40px) scale(.6); opacity: 0; }
+        }
+        @keyframes chest-pop {
+          0% { transform: translateY(12px) scale(.94) rotate(-1deg); opacity: 0; }
+          40%{ transform: translateY(0) scale(1.02) rotate(1deg); opacity: 1; }
+          70%{ transform: translateY(0) scale(.99) rotate(-.5deg); }
+          100%{ transform: translateY(0) scale(1) rotate(0deg); }
+        }
+        @keyframes title-pop {
+          0% { transform: translateY(10px); opacity: 0; }
+          60%{ transform: translateY(0); opacity: 1;}
+          100%{ transform: translateY(0); opacity: 1;}
+        }
+        @keyframes subtitle-pop {
+          0% { transform: translateY(8px); opacity: 0; }
+          100%{ transform: translateY(0); opacity: 1;}
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        .animate-wave{ animation: wave 1200ms ease-out forwards; }
+        .animate-spark{ animation: spark 1100ms ease-out infinite; }
+        .animate-chest-pop{ animation: chest-pop 680ms cubic-bezier(.2,.7,.2,1.1) both; }
+        .animate-title-pop{ animation: title-pop 520ms ease both; }
+        .animate-subtitle-pop{ animation: subtitle-pop 640ms ease .06s both; }
+        .animate-spin-slow{ animation: spin-slow 8s linear infinite; }
+        .animate-pulse-slow{ animation: pulse 2.5s ease-in-out infinite; }
+        @keyframes pulse {
+          0%,100% { opacity: .35; }
+          50%     { opacity: .15; }
+        }
       `}</style>
     </div>
   );
 }
-function PurchaseRarityFX({ open, rarityCode, rarityName, onClose }:{
-  open:boolean; rarityCode:string; rarityName:string; onClose:()=>void;
+
+function PurchaseRarityFX({
+  open, rarityCode, rarityName, onClose, durationMs = 2400,
+}: {
+  open:boolean; rarityCode:string; rarityName:string; onClose:()=>void; durationMs?:number;
 }) {
   const pal = rarityPalette[toRarity(rarityCode)];
+  const badge = badgeSrcFromCode(rarityCode);
   return (
     <FXOverlay
-      open={open} onClose={onClose} palette={pal}
-      title={rarityName.toUpperCase()} subtitle="Rarity Ditemukan!"
-      chestSrc="/fantasy/chest/chest_closed.svg" showBadge={badgeSrcFromCode(rarityCode)}
+      open={open} onClose={onClose} durationMs={durationMs}
+      palette={pal}
+      title={rarityName.toUpperCase()}
+      subtitle="Rarity Ditemukan!"
+      chestSrc="/fantasy/chest/chest_closed.svg"
+      showBadge={badge}
     />
   );
 }
-function OpenRewardFX({ open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose }:{
-  open:boolean; rarityCode:string; rarityName:string; rewardLabel:string; rewardType:string; rewardAmount:number|null; onClose:()=>void;
+
+function OpenRewardFX({
+  open, rarityCode, rarityName, rewardLabel, rewardType, rewardAmount, onClose, durationMs = 2400,
+}: {
+  open:boolean; rarityCode:string; rarityName:string; rewardLabel:string; rewardType:string; rewardAmount:number|null; onClose:()=>void; durationMs?:number;
 }) {
   const pal = rarityPalette[toRarity(rarityCode)];
   const value = rewardType === "CASH" ? `+${formatIDR(rewardAmount)} saldo` : rewardLabel;
+  const badge = badgeSrcFromCode(rarityCode);
   return (
     <FXOverlay
-      open={open} onClose={onClose} palette={pal}
-      title={rewardLabel} subtitle={`Hadiah • ${rarityName} • ${value}`}
-      chestSrc="/fantasy/chest/chest_open.svg" showBadge={badgeSrcFromCode(rarityCode)}
+      open={open} onClose={onClose} durationMs={durationMs}
+      palette={pal}
+      title={rewardLabel}
+      subtitle={`Hadiah • ${rarityName} • ${value}`}
+      chestSrc="/fantasy/chest/chest_open.svg"
+      showBadge={badge}
     />
   );
 }
@@ -243,7 +341,9 @@ export default function MemberHomePage() {
     sfxCoin.current = new Audio("/fantasy/sfx/coin_sparkle.wav");
     sfxError.current = new Audio("/fantasy/sfx/error_buzz.wav");
   }, []);
-  const play = (ref: React.MutableRefObject<HTMLAudioElement | null>) => { try { ref.current?.play().catch(()=>{}); } catch {} };
+  const play = (ref: React.MutableRefObject<HTMLAudioElement | null>) => {
+    try { ref.current?.play().catch(()=>{}); } catch {}
+  };
 
   // auth & profile
   useEffect(() => {
@@ -262,15 +362,15 @@ export default function MemberHomePage() {
     return () => { alive = false; };
   }, [router]);
 
-  // rarity map
+  // rarity map (with sort_order)
   useEffect(() => {
     let alive = true;
     (async () => {
       const { data, error } = await supabase.from("box_rarities").select("id, code, name, color_key, sort_order");
       if (!error && data && alive) {
-        const map = Object.fromEntries(data.map(r => [r.id, {
-          code: r.code, name: r.name, color_key: r.color_key, sort_order: (r as any).sort_order ?? 0
-        }]));
+        const map = Object.fromEntries(
+          data.map(r => [r.id, { code: r.code, name: r.name, color_key: r.color_key, sort_order: (r as any).sort_order ?? 0 }])
+        );
         setRarityMap(map);
       }
     })();
@@ -305,12 +405,14 @@ export default function MemberHomePage() {
     if (!profile) return;
     setInfoMessage(null); setInfoType(null);
     play(sfxClick);
+
     const { data, error } = await supabase.rpc("purchase_box", { p_credit_tier: tier });
     if (error || !data || !Array.isArray(data) || data.length === 0) {
       setInfoType("error"); setInfoMessage(error?.message || "Gagal membeli box."); play(sfxError); return;
     }
     const result = data[0] as PurchaseResult;
 
+    // update balance
     if (typeof result.credits_after === "number") {
       setProfile(p => (p ? { ...p, credit_balance: result.credits_after ?? p.credit_balance } : p));
     } else {
@@ -322,7 +424,8 @@ export default function MemberHomePage() {
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
 
-    await reloadInventory(profile.id);
+    // jangan blok efek
+    reloadInventory(profile.id);
   };
 
   // open
@@ -374,7 +477,7 @@ export default function MemberHomePage() {
       const rar = rarityMap[(r as any).rarity_id] || { code:"?", name:"?", color_key:"", sort_order: 0 };
       return { code: rar.code, name: rar.name, color_key: rar.color_key, prob: (r as any).gimmick_probability ?? 0, sort: rar.sort_order ?? 0 };
     })
-    // URUT: umum (Common) → langka (Special Legendary) → paling langka di BAWAH
+    // urut umum → langka (rarest di bawah)
     .sort((a,b) => (a.sort ?? 0) - (b.sort ?? 0));
     setTierInfo({ open:true, loading:false, tier, rows });
   };
@@ -412,13 +515,11 @@ export default function MemberHomePage() {
     );
   }
 
-  // SWAP warna Tier-2 dan Tier-3 (sesuai permintaan)
+  // SWAP warna Tier-2 dan Tier-3
   const tierStyles: Record<number, { frameFrom: string; frameTo: string; btnFrom: string; btnTo: string; ribbon: string; }> = {
     1: { frameFrom: "#8b5cf2AA", frameTo: "#22d3ee44", btnFrom: "#8b5cf2", btnTo: "#a78bfa", ribbon: "from-violet-300/90 to-cyan-300/80" },
-    // Tier-2 sekarang amber → pink (bekas Tier-3)
-    2: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" },
-    // Tier-3 sekarang crimson → magenta (bekas Tier-2)
-    3: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" },
+    2: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" }, // ex tier-3
+    3: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" }, // ex tier-2
   };
 
   return (
@@ -430,7 +531,7 @@ export default function MemberHomePage() {
         backgroundPosition: "center",
       }}
     >
-      {/* overlay dipisah supaya bg.jpg pasti terlihat */}
+      {/* overlay ringan supaya bg.jpg terlihat */}
       <div className="absolute inset-0 pointer-events-none"
            style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
@@ -482,7 +583,7 @@ export default function MemberHomePage() {
                     {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
                   </p>
 
-                  {/* Ikon BOX (center) – klik untuk Drop Info tier */}
+                  {/* Ikon BOX di tengah – klik untuk Drop Info tier */}
                   <div className="mt-4 flex justify-center">
                     <button type="button" aria-label="Lihat Drop Info"
                       onClick={() => loadTierInfo(tier)}
@@ -641,6 +742,7 @@ export default function MemberHomePage() {
         rarityCode={fxPurchase?.code ?? ""}
         rarityName={fxPurchase?.name ?? ""}
         onClose={() => setFxPurchase(null)}
+        durationMs={2400}
       />
       <OpenRewardFX
         open={!!fxOpen}
@@ -650,6 +752,7 @@ export default function MemberHomePage() {
         rewardType={fxOpen?.reward_type ?? ""}
         rewardAmount={fxOpen?.reward_amount ?? null}
         onClose={() => setFxOpen(null)}
+        durationMs={2400}
       />
 
       {/* shimmer keyframes */}
