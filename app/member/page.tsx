@@ -718,7 +718,6 @@ export default function MemberHomePage() {
             ))}
           </ul>
         )}
-        <div className="mt-3 text-[11px] text-slate-500">* Angka ini untuk tampilan (gimmick). RNG asli menggunakan real_probability.</div>
       </Modal>
 
       <Modal open={rarityInfo.open} onClose={() => setRarityInfo({open:false})} title={rarityInfo.title ?? "Drop Reward"}>
@@ -736,7 +735,6 @@ export default function MemberHomePage() {
             ))}
           </ul>
         )}
-        <div className="mt-3 text-[11px] text-slate-500">* Angka ini untuk tampilan (gimmick). RNG asli menggunakan real_probability.</div>
       </Modal>
 
       {/* FX Overlays */}
