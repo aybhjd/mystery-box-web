@@ -535,7 +535,7 @@ export default function MemberHomePage() {
               </h1>
 
               <p className="mt-2 text-sm text-slate-300/80">
-                Masuk ke dunia Fantasy. Buka peti, kejar rare drop, dan kumpulkan hadiahmu.
+                Buka BOX, kejar hadiah Langka, dan claim hadiahmu.
               </p>
 
               <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent shadow-[0_0_18px_rgba(249,115,22,.35)]" />
