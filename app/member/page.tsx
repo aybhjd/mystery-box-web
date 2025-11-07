@@ -606,7 +606,7 @@ export default function MemberHomePage() {
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
-            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
+            <button onClick={async () => { await supabase.auth.signOut(); router.push("/member/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
           </div>
         </div>
 
