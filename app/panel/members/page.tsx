@@ -547,7 +547,7 @@ export default function PanelMembersPage() {
             </p>
             <h1 className="text-2xl font-semibold">Members</h1>
             <p className="text-sm text-slate-400">
-              Daftar member di tenant yang sama. Bisa topup dan adjust credit
+              Daftar member di WEB yang sama. Bisa topup dan adjust credit
               dari Panel.
             </p>
           </div>
@@ -765,10 +765,6 @@ export default function PanelMembersPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
             <h2 className="text-lg font-semibold">New Member</h2>
-            <p className="text-xs text-slate-400">
-              Email internal akan otomatis dibuat sebagai{" "}
-              <span className="font-mono">username@member.local</span>.
-            </p>
 
             <form onSubmit={handleNewMemberSubmit} className="space-y-4">
               <div className="space-y-1.5">
@@ -779,7 +775,6 @@ export default function PanelMembersPage() {
                   id="nm-username"
                   type="text"
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="contoh: alipcuy"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
                 />
@@ -793,7 +788,6 @@ export default function PanelMembersPage() {
                   id="nm-password"
                   type="password"
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
