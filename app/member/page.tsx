@@ -432,7 +432,7 @@ export default function MemberHomePage() {
     >
       {/* overlay dipisah supaya bg.jpg pasti terlihat */}
       <div className="absolute inset-0 pointer-events-none"
-           style={{ background: "linear-gradient(180deg, rgba(7,11,19,.35), rgba(7,11,19,.78))" }} />
+           style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between">
