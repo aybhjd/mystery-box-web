@@ -681,7 +681,7 @@ export default function PanelBoxesPage() {
             </p>
             <h1 className="text-2xl font-semibold">Box & Rewards</h1>
             <p className="text-sm text-slate-400">
-              Master data rarity & hadiah per tenant. Di sini Admin bisa
+              Master data rarity & hadiah per WEB. Di sini Admin bisa
               mengatur probabilitas <span className="font-semibold">real</span>{" "}
               &amp; <span className="font-semibold">gimmick</span> baik untuk
               hadiah di setiap rarity (saat box dibuka), maupun probabilitas
