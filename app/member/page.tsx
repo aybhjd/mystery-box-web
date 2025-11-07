@@ -368,7 +368,7 @@ function FXOverlay({
         }
         .animate-fx-shake{
           animation: fx-shake .65s cubic-bezier(.36,.07,.19,.97) both;
-          animation-iteration-count: 2; /* goyang 2x */
+          animation-iteration-count: 1; /* goyang 2x */
           will-change: transform;
         }
 
