@@ -76,8 +76,9 @@ const rarityPalette: Record<RarityKey, { text: string; from: string; to: string;
   RARE: { text: "#cfe8ff", from: "#0f3a7a", to: "#081a3a", ring: "#56ccf2" },
   EPIC: { text: "#f5d0fe", from: "#4a1460", to: "#1a0b2a", ring: "#c471ed" },
   SUPREME: { text: "#fff1b8", from: "#6a5210", to: "#2a2108", ring: "#f7d774" },
-  LEGENDARY: { text: "#fff6cc", from: "#6b4a00", to: "#2a1b00", ring: "#f9d976" },
-  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#2a0b2a", to: "#0b0b2a", ring: "#ffffff" },
+  // Legendary diganti jadi tone merah
+  LEGENDARY: { text: "#fecaca", from: "#7f1d1d", to: "#2a0b0b", ring: "#ef4444" },
+  SPECIAL_LEGENDARY: { text: "#ffffff", from: "#1a1026", to: "#100a1a", ring: "#ffffff" },
 };
 function toRarity(key: string): RarityKey {
   const k = (key || "").toUpperCase() as RarityKey;
@@ -90,8 +91,12 @@ function rarityBadgeClasses(colorKey?: string) {
     case "blue": return `${base} text-sky-200 border-sky-400/40 bg-sky-900/20`;
     case "purple": return `${base} text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-900/20`;
     case "yellow": return `${base} text-amber-200 border-amber-400/40 bg-amber-900/20`;
-    case "gold": return `${base} text-yellow-100 border-yellow-400/50 bg-yellow-900/20`;
-    case "rainbow": return `${base} text-white border-white/50 bg-slate-50/5`;
+    // gold → merah (sesuai instruksi baru "Legendary = merah")
+    case "gold": return `${base} text-rose-200 border-rose-400/50 bg-rose-900/25`;
+    // rainbow → badge teks gradasi (hijau → biru → ungu → kuning → merah)
+    case "rainbow":
+      return `${base} border-white/50 bg-slate-900/30 text-transparent bg-clip-text
+              bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]`;
     default: return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
   }
 }
@@ -128,7 +133,7 @@ function Modal({
 }
 
 /* =========================
-   FX Overlays (simplified for mobile)
+   FX Overlays (mobile-friendly)
 ========================= */
 type FXBaseProps = {
   open: boolean; onClose: () => void;
@@ -224,7 +229,7 @@ export default function MemberHomePage() {
     Record<string, { code: string; name: string; color_key: string; sort_order?: number }>
   >({});
 
-  // SFX (ringan)
+  // sfx
   const sfxClick = useRef<HTMLAudioElement | null>(null);
   const sfxWhoosh = useRef<HTMLAudioElement | null>(null);
   const sfxReveal = useRef<HTMLAudioElement | null>(null);
@@ -358,7 +363,6 @@ export default function MemberHomePage() {
   const [rarityInfo, setRarityInfo] = useState<{open:boolean; loading?:boolean; rarityId?:string; title?:string; rows?: Array<{ label:string; display:string; prob:number }>}>({open:false});
 
   const loadTierInfo = async (tier: number) => {
-    // buka modal dulu (instan), lalu fetch async
     setTierInfo({ open: true, loading: true, tier, rows: [] });
     const { data, error } = await supabase
       .from("box_credit_rarity_probs")
@@ -369,7 +373,9 @@ export default function MemberHomePage() {
     const rows = (data ?? []).map(r => {
       const rar = rarityMap[(r as any).rarity_id] || { code:"?", name:"?", color_key:"", sort_order: 0 };
       return { code: rar.code, name: rar.name, color_key: rar.color_key, prob: (r as any).gimmick_probability ?? 0, sort: rar.sort_order ?? 0 };
-    }).sort((a,b) => (b.sort ?? 0) - (a.sort ?? 0));
+    })
+    // URUT: umum (Common) → langka (Special Legendary) → paling langka di BAWAH
+    .sort((a,b) => (a.sort ?? 0) - (b.sort ?? 0));
     setTierInfo({ open:true, loading:false, tier, rows });
   };
 
@@ -406,27 +412,32 @@ export default function MemberHomePage() {
     );
   }
 
-  // Tier color styles (Tier 2 crimson-magenta; Tier 3 amber-orange)
+  // SWAP warna Tier-2 dan Tier-3 (sesuai permintaan)
   const tierStyles: Record<number, { frameFrom: string; frameTo: string; btnFrom: string; btnTo: string; ribbon: string; }> = {
     1: { frameFrom: "#8b5cf2AA", frameTo: "#22d3ee44", btnFrom: "#8b5cf2", btnTo: "#a78bfa", ribbon: "from-violet-300/90 to-cyan-300/80" },
-    2: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" },
-    3: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" },
+    // Tier-2 sekarang amber → pink (bekas Tier-3)
+    2: { frameFrom: "#f59e0bAA", frameTo: "#f97316AA", btnFrom: "#f59e0b", btnTo: "#f97316", ribbon: "from-amber-300/90 to-pink-300/80" },
+    // Tier-3 sekarang crimson → magenta (bekas Tier-2)
+    3: { frameFrom: "#f43f5eAA", frameTo: "#ec4899AA", btnFrom: "#f43f5e", btnTo: "#ec4899", ribbon: "from-rose-300/90 to-fuchsia-300/85" },
   };
 
   return (
     <main
       className="relative min-h-screen text-slate-100"
       style={{
-        backgroundImage: "linear-gradient(180deg, rgba(7,11,19,.92), rgba(7,11,19,.96)), url('/fantasy/bg.jpg')",
+        backgroundImage: "url('/fantasy/bg.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
     >
+      {/* overlay dipisah supaya bg.jpg pasti terlihat */}
+      <div className="absolute inset-0 pointer-events-none"
+           style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-[10px] tracking-[0.28em] uppercase text-slate-400">MEMBER SITE</div>
+            <div className="text-[10px] tracking-[0.28em] uppercase text-slate-300/80">MEMBER SITE</div>
             <h1
               className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent
                          [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]"
@@ -436,11 +447,11 @@ export default function MemberHomePage() {
             >
               MYSTERY BOX
             </h1>
-            <p className="mt-2 text-sm text-slate-300/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
+            <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
             <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent" />
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="text-xs text-slate-400 text-right w-full">Login sebagai</div>
+            <div className="text-xs text-slate-300/80 text-right w-full">Login sebagai</div>
             <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40">
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
@@ -465,7 +476,7 @@ export default function MemberHomePage() {
                   </div>
 
                   <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-slate-300 mt-1">
                     {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
                     {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
                     {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
@@ -504,7 +515,7 @@ export default function MemberHomePage() {
         <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-950/80">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/70">
             <div className="text-sm font-semibold text-slate-200">Inventory Box Kamu</div>
-            <div className="text-xs text-slate-400">{inventory.length} box menunggu dibuka</div>
+            <div className="text-xs text-slate-300">{inventory.length} box menunggu dibuka</div>
           </div>
 
           {inventoryLoading ? (
