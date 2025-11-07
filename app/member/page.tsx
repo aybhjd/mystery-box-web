@@ -449,11 +449,6 @@ export default function MemberHomePage() {
 
       // refresh inventory dari database
       await reloadInventory();
-
-      showInfo(
-        `Berhasil membeli box ${result.credit_tier} credit. Rarity: ${result.rarity_name} (${result.rarity_code}).`,
-        "success",
-      );
     } catch (err: any) {
       console.error(err);
       showInfo(
@@ -516,11 +511,6 @@ export default function MemberHomePage() {
         credit_tier: box.credit_tier,
       };
       setLastOpened(opened);
-
-      showInfo(
-        `Box ${box.credit_tier} credit terbuka! Rarity: ${result.rarity_name} (${result.rarity_code}) — Hadiah: ${result.reward_label}`,
-        "success",
-      );
     } catch (err: any) {
       console.error(err);
       showInfo(
@@ -610,14 +600,8 @@ export default function MemberHomePage() {
         </div>
 
         {/* Info message */}
-        {infoMessage && infoType && (
-          <div
-            className={`rounded-lg border px-4 py-3 text-sm ${
-              infoType === "success"
-                ? "border-emerald-500/70 bg-emerald-950/40 text-emerald-200"
-                : "border-red-500/70 bg-red-950/40 text-red-200"
-            }`}
-          >
+        {infoType === "error" && infoMessage && (
+          <div className="mt-4 rounded-lg px-3 py-2 text-sm bg-rose-500/10 border border-rose-500/30 text-rose-200">
             {infoMessage}
           </div>
         )}
