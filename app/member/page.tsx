@@ -437,16 +437,70 @@ export default function MemberHomePage() {
   const sfxCoin = useRef<HTMLAudioElement | null>(null);
   const sfxError = useRef<HTMLAudioElement | null>(null);
 
+  // >>> BGM
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
+  const [bgmMuted, setBgmMuted] = useState(false);
+
   useEffect(() => {
-    sfxClick.current = new Audio("/fantasy/sfx/ui_click.wav");
+    // === Init SFX ===
+    sfxClick.current  = new Audio("/fantasy/sfx/ui_click.wav");
     sfxWhoosh.current = new Audio("/fantasy/sfx/whoosh_buy.wav");
     sfxReveal.current = new Audio("/fantasy/sfx/reveal_burst.wav");
-    sfxCoin.current = new Audio("/fantasy/sfx/coin_sparkle.wav");
-    sfxError.current = new Audio("/fantasy/sfx/error_buzz.wav");
-    // kecilkan sedikit volume biar elegan
-    [sfxWhoosh, sfxReveal, sfxCoin].forEach(ref => { if (ref.current) ref.current.volume = 0.85; });
+    sfxCoin.current   = new Audio("/fantasy/sfx/coin_sparkle.wav");
+    sfxError.current  = new Audio("/fantasy/sfx/error_buzz.wav");
+    [sfxWhoosh, sfxReveal, sfxCoin].forEach(ref => {
+      if (ref.current) ref.current.volume = 0.85;
+    });
+
+    // === Init BGM (loop & autoplay-safe) ===
+    const bgm = new Audio("/fantasy/music/bgm.mp3");
+    bgm.loop = true;
+    // volume default 0.18, bisa disimpan/restore dari localStorage
+    const savedVol = Number(localStorage.getItem("bgmVol") ?? "0.18");
+    bgm.volume = Math.min(1, Math.max(0, isNaN(savedVol) ? 0.18 : savedVol));
+    bgm.muted  = localStorage.getItem("bgmMuted") === "1";
+    bgmRef.current = bgm;
+    setBgmMuted(bgm.muted);
+
+    // Mulai setelah interaksi pertama (kebijakan autoplay browser)
+    const start = () => {
+      bgmRef.current?.play().catch(() => {});
+    };
+    window.addEventListener("pointerdown", start, { once: true });
+    window.addEventListener("keydown", start, { once: true });
+
+    // Pause saat tab disembunyikan, lanjut saat kembali
+    const onVis = () => {
+      const el = bgmRef.current;
+      if (!el) return;
+      if (document.hidden) el.pause();
+      else el.play().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pointerdown", start);
+      window.removeEventListener("keydown", start);
+      try { bgm.pause(); } catch {}
+      bgm.src = "";
+      bgmRef.current = null;
+    };
   }, []);
-  const play = (ref: React.MutableRefObject<HTMLAudioElement | null>) => { try { ref.current?.play().catch(()=>{}); } catch {} };
+
+  const play = (
+    ref: React.MutableRefObject<HTMLAudioElement | null>,
+    reset = true
+  ) => {
+    try {
+      const el = ref.current;
+      if (!el) return;
+      if (reset) el.currentTime = 0;   // biar bisa “spam” bunyi cepat
+      // el.play() bisa throw di Safari, jadi bungkus try/catch
+      el.play().catch(() => {});
+    } catch {}
+  };
 
   // auth & profile
   useEffect(() => {
@@ -632,6 +686,19 @@ export default function MemberHomePage() {
               <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
+            <button
+              onClick={() => {
+                if (!bgmRef.current) return;
+                const next = !bgmRef.current.muted;
+                bgmRef.current.muted = next;
+                setBgmMuted(next);
+                localStorage.setItem("bgmMuted", next ? "1" : "0");
+              }}
+              className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50"
+              title={bgmMuted ? "Nyalakan musik" : "Matikan musik"}
+            >
+              {bgmMuted ? "🎵 Off" : "🎵 On"}
+            </button>
             <button onClick={async () => { await supabase.auth.signOut(); router.push("/member/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
           </div>
         </div>
