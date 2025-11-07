@@ -158,7 +158,7 @@ function FXOverlay({
     const toReveal = variant === "open" ? TEASE_MS : NEUTRAL_MS + TEASE_MS;
 
     // mulai goyang sedikit sebelum REVEAL
-    const SHAKE_MS = 500;
+    const SHAKE_MS = 800;
     const shakeAt = Math.max(0, toReveal - SHAKE_MS);
 
     const tShake = setTimeout(() => setIsShaking(true), shakeAt);
@@ -363,7 +363,7 @@ function FXOverlay({
           87.5%{ transform: translate(-.5px,0px) rotate(-0.2deg); }
           100% { transform: translate(0,0) rotate(0deg); }
         }
-        .animate-fx-shake{ animation: fx-shake .5s ease-in-out both; }
+        .animate-fx-shake{ animation: fx-shake .8s ease-in-out both; }
 
         @keyframes fx-spark { 0%{transform:translate(0,0) scale(.5);opacity:0} 12%{opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0} }
 
