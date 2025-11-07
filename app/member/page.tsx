@@ -150,18 +150,16 @@ function FXOverlay({
   const TEASE_MS   = stagingDurations?.tease   ?? (variant === "open" ? 900 : 820);
   const REVEAL_MS  = stagingDurations?.reveal  ?? (variant === "open" ? 950 : 720);
 
-  const [phase, setPhase] = useState<0 | 1 | 2>(variant === "open" ? 1 : 0); // 0 neutral, 1 tease, 2 reveal
+  const [phase, setPhase] = useState<0 | 1 | 2>(0); // 0 neutral, 1 tease, 2 reveal
 
   useEffect(() => {
     if (!open) return;
-    const start = variant === "open" ? 1 : 0;           // buka box: mulai dari TEASE
-    setPhase(start);
-    const toReveal = variant === "open" ? TEASE_MS      // langsung TEASE → REVEAL
-                                        : NEUTRAL_MS + TEASE_MS;
-    const tNext = setTimeout(() => setPhase(2), toReveal);
-    const tClose = setTimeout(onClose, toReveal + REVEAL_MS);
-    return () => { clearTimeout(tNext); clearTimeout(tClose); };
-  }, [open, variant, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
+    setPhase(0);
+    const t0 = setTimeout(() => setPhase(1), NEUTRAL_MS);
+    const t1 = setTimeout(() => setPhase(2), NEUTRAL_MS + TEASE_MS);
+    const tC = setTimeout(onClose, NEUTRAL_MS + TEASE_MS + REVEAL_MS);
+    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(tC); };
+  }, [open, NEUTRAL_MS, TEASE_MS, REVEAL_MS, onClose]);
 
   const isNeutral = phase === 0;
   const isTease = phase === 1;
@@ -249,14 +247,6 @@ function FXOverlay({
       </div>
 
       {/* teks & badge hanya pada reveal */}
-      {variant === "open" && isTease && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="mt-[30vmin] px-4 py-2 rounded-lg bg-black/30 border border-white/10
-                          text-slate-200/90 text-sm font-medium animate-fx-suspense">
-            Box Hadiah Sedang dibuka…
-          </div>
-        </div>
-      )}
       {isReveal && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="mt-[30vmin] px-6 py-4 rounded-2xl text-center">
@@ -320,9 +310,6 @@ function FXOverlay({
       <style jsx global>{`
         @keyframes fx-flash { 0%{opacity:0} 12%{opacity:.95} 100%{opacity:0} }
         .animate-fx-flash{animation:fx-flash .18s ease-out both}
-
-        @keyframes fx-suspense { 0%{opacity:.25} 50%{opacity:1} 100%{opacity:.25} }
-        .animate-fx-suspense{ animation: fx-suspense 1s ease-in-out infinite }
 
         @keyframes fx-pop { 0%{transform:translateY(8px) scale(.92);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes fx-pop-delayed { 0%{transform:translateY(8px);opacity:0} 100%{transform:translateY(0);opacity:1} }
@@ -495,7 +482,7 @@ export default function MemberHomePage() {
     setFxPurchase({ code: result.rarity_code, name: result.rarity_name });
     play(sfxWhoosh);
 
-    await reloadInventory(profile.id);
+    
   };
 
   // open
@@ -588,10 +575,10 @@ export default function MemberHomePage() {
       style={{ backgroundImage: "url('/fantasy/bg.jpg')", backgroundSize: "cover", backgroundPosition: "center" }}
     >
       {/* overlay dipisah supaya bg.jpg terlihat & ringan */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.35), rgba(7,11,19,.60))" }} />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-start">
+        <div className="flex items-start justify-between">
           <div>
             <div className="text-[10px] tracking-[0.28em] uppercase text-slate-300/80">MEMBER SITE</div>
             <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
@@ -600,13 +587,13 @@ export default function MemberHomePage() {
             <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
             <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent" />
           </div>
-          <div className="flex flex-col gap-2 md:items-end items-start">
-            <div className="text-xs text-slate-300/80">Login sebagai</div>
-            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40 w-full md:w-auto">
-              <span className="text-emerald-300 font-semibold break-all">{profile.username || "member"}</span>
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-xs text-slate-300/80 text-right w-full">Login sebagai</div>
+            <div className="px-2 py-[2px] rounded-lg border border-slate-600/60 bg-slate-900/40">
+              <span className="text-emerald-300 font-semibold">{profile.username || "member"}</span>
               <span className="ml-2 text-emerald-400/90">{formatIDR(profile.credit_balance)} credit</span>
             </div>
-            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50 self-stretch md:self-auto">Logout</button>
+            <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="text-xs rounded-md border border-slate-600/60 px-2 py-1 hover:bg-slate-800/50">Logout</button>
           </div>
         </div>
 
@@ -623,23 +610,22 @@ export default function MemberHomePage() {
                   </div>
 
                   <div className="mt-2 text-lg font-semibold">Box {tier} Credit</div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
+                    {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
+                    {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
+                  </p>
 
                   {/* Ikon BOX (center) – klik untuk Drop Info tier */}
                   <div className="mt-4 flex justify-center">
                     <button type="button" aria-label="Lihat Drop Info" onClick={() => loadTierInfo(tier)} className="rounded-2xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 hover:bg-slate-800/80">
-                      <img src="/fantasy/chest/chest_closed.svg" alt="" className="h-20 md:h-24 will-change-transform" />
+                      <img src="/fantasy/chest/chest_closed.svg" alt="" className="h-14 md:h-16 will-change-transform" />
                     </button>
                   </div>
 
                   <button onClick={() => { play(sfxClick); handlePurchase(tier as 1 | 2 | 3); }} className="mt-4 w-full rounded-full text-black font-semibold py-2" style={{ background: `linear-gradient(90deg, ${s.btnFrom}, ${s.btnTo})` }}>
                     Beli Box {tier} Credit
                   </button>
-                  {/* Info dipindah ke bawah tombol */}
-                  <p className="mt-2 text-xs text-slate-300">
-                    {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
-                    {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
-                    {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
-                  </p>
                 </div>
               </div>
             );
@@ -754,7 +740,7 @@ export default function MemberHomePage() {
       </Modal>
 
       {/* FX Overlays */}
-      <PurchaseRarityFX open={!!fxPurchase} rarityCode={fxPurchase?.code ?? ""} rarityName={fxPurchase?.name ?? ""} onClose={() => setFxPurchase(null)} />
+      <PurchaseRarityFX open={!!fxPurchase} rarityCode={fxPurchase?.code ?? ""} rarityName={fxPurchase?.name ?? ""} onClose={() => { setFxPurchase(null); if (profile?.id) reloadInventory(profile.id); }} />
       <OpenRewardFX open={!!fxOpen} rarityCode={fxOpen?.rarity_code ?? ""} rarityName={fxOpen?.rarity_name ?? ""} rewardLabel={fxOpen?.reward_label ?? ""} rewardType={fxOpen?.reward_type ?? ""} rewardAmount={fxOpen?.reward_amount ?? null} onClose={() => setFxOpen(null)} />
 
       {/* shimmer keyframes */}
