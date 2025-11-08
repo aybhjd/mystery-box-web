@@ -14,6 +14,7 @@ type MemberProfile = {
   username: string | null;
   credit_balance: number | null;
   role: UserRole;
+  tenant_id?: string | null;
 };
 
 type PurchaseResult = {
@@ -437,6 +438,7 @@ export default function MemberHomePage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<MemberProfile | null>(null);
+  const [tenantName, setTenantName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -538,12 +540,40 @@ export default function MemberHomePage() {
     (async () => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) { router.push("/login"); return; }
+
+      // ambil profil + relasi tenants(name)
       const { data: p, error } = await supabase
-        .from("profiles").select("id, username, credit_balance, role").eq("id", userData.user.id).single();
-      if (error || !p) { setInfoType("error"); setInfoMessage("Gagal membaca profil member."); setLoading(false); return; }
+        .from("profiles")
+        .select("id, username, credit_balance, role, tenant_id, tenants(name)")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (error || !p) {
+        setInfoType("error");
+        setInfoMessage("Gagal membaca profil member.");
+        setLoading(false);
+        return;
+      }
       if (p.role !== "MEMBER") { router.push("/"); return; }
       if (!alive) return;
-      setProfile(p);
+
+      setProfile(p as any);
+
+      // set dari relasi
+      setTenantName(((p as any)?.tenants?.name) ?? null);
+
+      // === fallback kalau relasi belum tersetup (opsional tapi berguna) ===
+      if (!((p as any)?.tenants?.name) && (p as any)?.tenant_id) {
+        const { data: t } = await supabase
+          .from("tenants")
+          .select("name")
+          .eq("id", (p as any).tenant_id)
+          .single();
+        if (!alive) return;
+        if (t?.name) setTenantName(t.name);
+      }
+      // === end fallback ===
+
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -746,7 +776,7 @@ export default function MemberHomePage() {
 
         <div>
           <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
-            MYSTERY BOX
+            MYSTERY BOX {tenantName ? `(${tenantName})` : ""}
           </h1>
           <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
           <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent" />
