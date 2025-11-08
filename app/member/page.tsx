@@ -744,6 +744,22 @@ export default function MemberHomePage() {
           </div>
         </div>
 
+        {/* Title + tagline (dipindah ke bawah toolbar) */}
+        <div className="mt-3 md:mt-4">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-slate-200/60">
+            Member Site
+          </div>
+          <h1 className="mt-1 text-4xl sm:text-5xl font-extrabold leading-[0.9]
+             text-transparent bg-clip-text
+             bg-gradient-to-b from-[#F3E8FF] to-[#A78BFA]
+             drop-shadow-[0_2px_12px_rgba(124,58,237,.35)]">
+            MYSTERY<br className="hidden sm:block" /> BOX
+          </h1>
+          <p className="mt-2 max-w-2xl text-slate-200/85 text-sm sm:text-base">
+            Buka BOX, kejar hadiah Langka, dan claim hadiahmu.
+          </p>
+        </div>
+
         {/* Cards */}
         <div className="grid md:grid-cols-3 gap-4 mt-8">
           {[1, 2, 3].map((tier) => {
