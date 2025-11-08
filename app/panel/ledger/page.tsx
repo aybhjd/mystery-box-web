@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -10,6 +10,7 @@ type PanelProfile = {
   id: string;
   tenant_id: string;
   role: UserRole;
+  username: string | null;
 };
 
 type LedgerBase = {
@@ -18,7 +19,7 @@ type LedgerBase = {
   member_profile_id: string | null;
   delta: number;
   balance_after: number;
-  kind: string;
+  kind: "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE" | string;
   description: string | null;
   created_by_profile_id: string | null;
   created_at: string;
@@ -31,7 +32,7 @@ type MemberShort = {
 
 type CreatorShort = {
   id: string;
-  email: string | null;
+  username: string | null;
 };
 
 type LedgerRow = LedgerBase & {
@@ -42,94 +43,144 @@ type LedgerRow = LedgerBase & {
 export default function PanelLedgerPage() {
   const router = useRouter();
 
+  // ---- session / profile ----
   const [profile, setProfile] = useState<PanelProfile | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // ---- rows ----
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(true);
   const [rowsError, setRowsError] = useState<string | null>(null);
 
-  const [searchUsername, setSearchUsername] = useState("");
-  const [kindFilter, setKindFilter] = useState<
-    "ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE"
-  >("ALL");
+  // ---- filter (staged -> applied, NOT live) ----
+  const [filterUsername, setFilterUsername] = useState("");
+  const [filterKind, setFilterKind] = useState<"ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE">("ALL");
+  const [appliedUsername, setAppliedUsername] = useState("");
+  const [appliedKind, setAppliedKind] = useState<"ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE">("ALL");
 
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [infoType, setInfoType] = useState<"success" | "error" | null>(
-    null,
-  );
+  function applyFilters() {
+    setAppliedUsername(filterUsername.trim());
+    setAppliedKind(filterKind);
+  }
 
-  // ---------- load profil admin/CS ----------
+  // ---- user header dropdown + self password modal ----
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [selfPwdModalOpen, setSelfPwdModalOpen] = useState(false);
+  const [selfPwdNew, setSelfPwdNew] = useState("");
+  const [selfPwdConfirm, setSelfPwdConfirm] = useState("");
+  const [selfPwdError, setSelfPwdError] = useState<string | null>(null);
+  const [selfPwdLoading, setSelfPwdLoading] = useState(false);
+  const [showSelfPwdNew, setShowSelfPwdNew] = useState(false);
+  const [showSelfPwdConfirm, setShowSelfPwdConfirm] = useState(false);
 
+  function openSelfPasswordModal() {
+    setSelfPwdModalOpen(true);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setUserMenuOpen(false);
+  }
+  function closeSelfPasswordModal() {
+    setSelfPwdModalOpen(false);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setSelfPwdLoading(false);
+    setShowSelfPwdNew(false);
+    setShowSelfPwdConfirm(false);
+  }
+  async function handleSelfPasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSelfPwdError(null);
+    if (!selfPwdNew || selfPwdNew.length < 6) {
+      setSelfPwdError("Password minimal 6 karakter.");
+      return;
+    }
+    if (selfPwdNew !== selfPwdConfirm) {
+      setSelfPwdError("Konfirmasi password tidak sama.");
+      return;
+    }
+    setSelfPwdLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: selfPwdNew });
+    if (error) {
+      setSelfPwdError(error.message || "Gagal mengubah password.");
+      setSelfPwdLoading(false);
+      return;
+    }
+    closeSelfPasswordModal();
+  }
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/panel/login");
+  }
+
+  // ---- ESC to close modal ----
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && selfPwdModalOpen) closeSelfPasswordModal();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selfPwdModalOpen]);
+
+  // ---- load profile ----
   useEffect(() => {
     async function loadProfile() {
       setLoadingProfile(true);
       setProfileError(null);
 
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
-
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
-        console.error(userErr);
         setProfileError("Gagal membaca sesi login.");
         setLoadingProfile(false);
         return;
       }
-
       if (!user) {
         router.push("/panel/login");
         return;
       }
+      setCurrentUserEmail(user.email ?? null);
 
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
-        .select("id, tenant_id, role")
+        .select("id, tenant_id, role, username")
         .eq("id", user.id)
         .maybeSingle<PanelProfile>();
 
       if (profErr) {
-        console.error(profErr);
         setProfileError("Gagal membaca profil.");
         setLoadingProfile(false);
         return;
       }
-
       if (!prof) {
         setProfileError("Profil belum dibuat untuk akun ini.");
         setLoadingProfile(false);
         return;
       }
-
       if (prof.role !== "ADMIN" && prof.role !== "CS") {
         setProfileError("Halaman ini hanya untuk Admin / CS.");
         setLoadingProfile(false);
         return;
       }
-
       setProfile(prof);
       setLoadingProfile(false);
     }
-
     loadProfile();
   }, [router]);
 
-  // ---------- load ledger untuk tenant ----------
-
+  // ---- load ledger rows ----
   useEffect(() => {
     async function loadRows() {
       if (!profile) return;
-
       setLoadingRows(true);
       setRowsError(null);
 
       try {
         const { data, error } = await supabase
           .from("credit_ledger")
-          .select(
-            `
+          .select(`
             id,
             tenant_id,
             member_profile_id,
@@ -139,82 +190,46 @@ export default function PanelLedgerPage() {
             description,
             created_by_profile_id,
             created_at
-          `,
-          )
+          `)
           .eq("tenant_id", profile.tenant_id)
           .order("created_at", { ascending: false })
           .limit(200);
 
         if (error) {
-          console.error(error);
           setRowsError("Gagal membaca data ledger.");
           setLoadingRows(false);
           return;
         }
 
         const baseRows = (data || []) as LedgerBase[];
-
         if (baseRows.length === 0) {
           setRows([]);
           setLoadingRows(false);
           return;
         }
 
-        const memberIds = Array.from(
-          new Set(
-            baseRows
-              .map((r) => r.member_profile_id)
-              .filter((v): v is string => !!v),
-          ),
-        );
-        const creatorIds = Array.from(
-          new Set(
-            baseRows
-              .map((r) => r.created_by_profile_id)
-              .filter((v): v is string => !!v),
-          ),
-        );
+        const memberIds = Array.from(new Set(baseRows.map(r => r.member_profile_id).filter((v): v is string => !!v)));
+        const creatorIds = Array.from(new Set(baseRows.map(r => r.created_by_profile_id).filter((v): v is string => !!v)));
 
         const [
-          { data: memberData, error: memberErr },
-          { data: creatorData, error: creatorErr },
+          { data: memberData },
+          { data: creatorData },
         ] = await Promise.all([
           memberIds.length
-            ? supabase
-                .from("profiles")
-                .select("id, username")
-                .in("id", memberIds)
-            : Promise.resolve({ data: [] as MemberShort[], error: null }),
+            ? supabase.from("profiles").select("id, username").in("id", memberIds)
+            : Promise.resolve({ data: [] as MemberShort[] }),
           creatorIds.length
-            ? supabase
-                .from("profiles")
-                .select("id, email")
-                .in("id", creatorIds)
-            : Promise.resolve({ data: [] as CreatorShort[], error: null }),
+            ? supabase.from("profiles").select("id, username").in("id", creatorIds)
+            : Promise.resolve({ data: [] as CreatorShort[] }),
         ]);
 
-        if (memberErr) {
-          console.error("Ledger member lookup error:", memberErr);
-        }
-        if (creatorErr) {
-          console.error("Ledger creator lookup error:", creatorErr);
-        }
-
-        const memberMap = new Map(
-          (memberData || []).map((m) => [m.id, m as MemberShort]),
-        );
-        const creatorMap = new Map(
-          (creatorData || []).map((c) => [c.id, c as CreatorShort]),
-        );
+        const memberMap = new Map((memberData || []).map((m) => [m.id, m as MemberShort]));
+        const creatorMap = new Map((creatorData || []).map((c) => [c.id, c as CreatorShort]));
 
         const fullRows: LedgerRow[] = baseRows.map((r) => ({
           ...r,
-          member: r.member_profile_id
-            ? memberMap.get(r.member_profile_id) || null
-            : null,
-          created_by: r.created_by_profile_id
-            ? creatorMap.get(r.created_by_profile_id) || null
-            : null,
+          member: r.member_profile_id ? memberMap.get(r.member_profile_id) || null : null,
+          created_by: r.created_by_profile_id ? creatorMap.get(r.created_by_profile_id) || null : null,
         }));
 
         setRows(fullRows);
@@ -229,90 +244,25 @@ export default function PanelLedgerPage() {
     loadRows();
   }, [profile]);
 
-  function showInfo(msg: string, type: "success" | "error") {
-    setInfoMessage(msg);
-    setInfoType(type);
-    setTimeout(() => {
-      setInfoMessage(null);
-      setInfoType(null);
-    }, 3500);
-  }
-
-  // ---------- filter di client ----------
-
+  // ---- applied filtering (NOT live) ----
   const filteredRows = useMemo(() => {
     return rows
-      // Ledger menampilkan semua mutasi credit utama
-      .filter((row) =>
-        ["TOPUP", "ADJUSTMENT", "BOX_PURCHASE"].includes(row.kind),
-      )
+      .filter((row) => ["TOPUP", "ADJUSTMENT", "BOX_PURCHASE"].includes(row.kind))
+      .filter((row) => (appliedKind === "ALL" ? true : row.kind === appliedKind))
       .filter((row) => {
-        if (kindFilter !== "ALL" && row.kind !== kindFilter) {
-          return false;
-        }
-
-        if (searchUsername.trim() !== "") {
-          const u = (row.member?.username || "")
-            .toLowerCase()
-            .trim();
-          if (!u.includes(searchUsername.toLowerCase().trim())) {
-            return false;
-          }
-        }
-
-        return true;
+        if (!appliedUsername) return true;
+        const u = (row.member?.username || "").toLowerCase();
+        return u.includes(appliedUsername.toLowerCase());
       });
-  }, [rows, kindFilter, searchUsername]);
+  }, [rows, appliedKind, appliedUsername]);
 
-  // ---------- helpers ----------
+  const displayName = profile?.username || currentUserEmail || "Akun Panel";
 
-  function formatDateTime(dateStr: string) {
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    return d.toLocaleString("id-ID", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  }
-
-  function formatKind(kind: string) {
-    if (kind === "TOPUP") return "Topup";
-    if (kind === "ADJUSTMENT") return "Adjustment (-)";
-    if (kind === "BOX_PURCHASE") return "Beli box";
-    return kind;
-  }
-
-  function kindBadgeClass(kind: string) {
-    if (kind === "TOPUP") {
-      return "border-emerald-500/60 bg-emerald-950/50 text-emerald-200";
-    }
-    if (kind === "ADJUSTMENT" || kind === "BOX_PURCHASE") {
-      // dua-duanya mengurangi credit → merah
-      return "border-rose-500/60 bg-rose-950/50 text-rose-200";
-    }
-    return "border-slate-500/60 bg-slate-900/60 text-slate-200";
-  }
-
-  function deltaText(delta: number) {
-    const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
-    const abs = Math.abs(delta);
-    return `${sign}${abs} credit`;
-  }
-
-  function deltaClass(delta: number) {
-    if (delta > 0) return "text-emerald-300";
-    if (delta < 0) return "text-rose-300";
-    return "text-slate-200";
-  }
-
-  // ---------- render ----------
-
+  // ---- render ----
   if (loadingProfile) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-slate-300">
-          Memuat profil admin / CS...
-        </p>
+        <p className="text-sm text-slate-300">Memuat profil admin / CS...</p>
       </main>
     );
   }
@@ -338,72 +288,87 @@ export default function PanelLedgerPage() {
       {/* Header */}
       <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-sky-400">
-            Panel
-          </p>
-          <h1 className="text-xl font-semibold text-slate-50">
-            Ledger Credit Member
-          </h1>
+          <p className="text-xs uppercase tracking-[0.25em] text-sky-400">Panel</p>
+          <h1 className="text-xl font-semibold text-slate-50">Ledger Credit Member</h1>
           <p className="text-xs text-slate-400">
-            Riwayat semua mutasi credit (topup, adjust, dan pembelian box)
-            di WEB ini. Detail box bisa dilihat di menu History.
+            Riwayat semua mutasi credit (topup, adjust, dan pembelian box) di WEB ini.
           </p>
         </div>
 
-        <div className="flex flex-col items-end gap-2 md:items-end">
-          <p className="text-[11px] text-slate-500">
-            Menampilkan {filteredRows.length} dari {rows.length} mutasi
-            terakhir.
-          </p>
+        {/* User dropdown (sama seperti Members) */}
+        <div className="relative inline-flex">
+          <button
+            type="button"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-2 text-xs font-medium hover:bg-slate-800 transition"
+          >
+            <span className="mr-2 truncate max-w-[160px]">{displayName}</span>
+            <span className="text-slate-400">▾</span>
+          </button>
+          {userMenuOpen && (
+            <div className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-700 bg-slate-900/95 shadow-lg text-xs overflow-hidden z-20">
+              <button
+                type="button"
+                onClick={openSelfPasswordModal}
+                className="w-full text-left px-3 py-2 hover:bg-slate-800"
+              >
+                Ubah password saya
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  void handleLogout();
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-300"
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Info message */}
-      {infoMessage && infoType && (
-        <div
-          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-            infoType === "success"
-              ? "border-emerald-500/70 bg-emerald-950/40 text-emerald-200"
-              : "border-red-500/70 bg-red-950/40 text-red-200"
-          }`}
-        >
-          {infoMessage}
-        </div>
-      )}
-
-      {/* Filter bar */}
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center">
+      {/* Filter bar (NOT live) */}
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end">
           <div className="flex-1">
-            <label className="mb-1 block text-xs text-slate-400">
-              Filter username member
-            </label>
-            <input
-              value={searchUsername}
-              onChange={(e) => setSearchUsername(e.target.value)}
-              placeholder="cari username..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none ring-0 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">
-              Jenis mutasi
-            </label>
-            <select
-              value={kindFilter}
-              onChange={(e) =>
-                setKindFilter(e.target.value as any)
-              }
-              className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-            >
-              <option value="ALL">Semua</option>
-              <option value="TOPUP">Topup</option>
-              <option value="ADJUSTMENT">Adjustment (-)</option>
-              <option value="BOX_PURCHASE">Beli box</option>
-            </select>
+            <label className="mb-1 block text-xs text-slate-400">Filter username member</label>
+            <div className="flex gap-2">
+              <input
+                value={filterUsername}
+                onChange={(e) => setFilterUsername(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters();
+                }}
+                placeholder="cari username..."
+                className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none ring-0 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 max-w-xs"
+              />
+              <select
+                value={filterKind}
+                onChange={(e) => setFilterKind(e.target.value as any)}
+                className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              >
+                <option value="ALL">Semua</option>
+                <option value="TOPUP">Topup</option>
+                <option value="ADJUSTMENT">Adjustment (-)</option>
+                <option value="BOX_PURCHASE">Beli box</option>
+              </select>
+              <button
+                type="button"
+                onClick={applyFilters}
+                className="inline-flex items-center rounded-lg border border-sky-500/70 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/10 transition"
+                title="Cari"
+              >
+                Search
+              </button>
+            </div>
           </div>
         </div>
+
+        <p className="text-[11px] text-slate-500">
+          Menampilkan {filteredRows.length} dari {rows.length} mutasi terakhir.
+        </p>
       </div>
 
       {/* Tabel ledger */}
@@ -423,74 +388,159 @@ export default function PanelLedgerPage() {
           <tbody>
             {loadingRows ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-6 text-center text-slate-400"
-                >
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   Memuat data ledger...
                 </td>
               </tr>
             ) : rowsError ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-6 text-center text-red-300"
-                >
+                <td colSpan={7} className="px-4 py-6 text-center text-red-300">
                   {rowsError}
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-6 text-center text-slate-400"
-                >
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   Tidak ada mutasi yang cocok dengan filter.
                 </td>
               </tr>
             ) : (
               filteredRows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-t border-slate-800/80 hover:bg-slate-900/60"
-                >
-                  <td className="px-4 py-2 text-[11px]">
-                    {formatDateTime(row.created_at)}
-                  </td>
-                  <td className="px-2 py-2 text-[11px]">
-                    {row.member?.username || "-"}
-                  </td>
-                  <td
-                    className={`px-2 py-2 text-center text-[11px] font-semibold ${deltaClass(
-                      row.delta,
-                    )}`}
-                  >
+                <tr key={row.id} className="border-t border-slate-800/80 hover:bg-slate-900/60">
+                  <td className="px-4 py-2 text-[11px]">{formatDateTime(row.created_at)}</td>
+                  <td className="px-2 py-2 text-[11px]">{row.member?.username || "—"}</td>
+                  <td className={`px-2 py-2 text-center text-[11px] font-semibold ${deltaClass(row.delta)}`}>
                     {deltaText(row.delta)}
                   </td>
-                  <td className="px-2 py-2 text-center text-[11px]">
-                    {row.balance_after} credit
-                  </td>
+                  <td className="px-2 py-2 text-center text-[11px]">{row.balance_after} credit</td>
                   <td className="px-2 py-2 text-[11px]">
-                    <span
-                      className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${kindBadgeClass(
-                        row.kind,
-                      )}`}
-                    >
+                    <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${kindBadgeClass(row.kind)}`}>
                       {formatKind(row.kind)}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-[11px]">
-                    {row.description || "-"}
-                  </td>
-                  <td className="px-2 py-2 text-[11px]">
-                    {row.created_by?.email || "-"}
-                  </td>
+                  <td className="px-2 py-2 text-[11px]">{row.description || "—"}</td>
+                  <td className="px-2 py-2 text-[11px]">{row.created_by?.username || "—"}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Modal Ubah Password Saya */}
+      {selfPwdModalOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeSelfPasswordModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">Ubah password akun saya</h2>
+            <form onSubmit={handleSelfPasswordSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="self-pwd-new">Password baru</label>
+                <div className="relative">
+                  <input
+                    id="self-pwd-new"
+                    type={showSelfPwdNew ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdNew}
+                    onChange={(e) => setSelfPwdNew(e.target.value)}
+                    placeholder="min. 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSelfPwdNew((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {showSelfPwdNew ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="self-pwd-confirm">Konfirmasi password baru</label>
+                <div className="relative">
+                  <input
+                    id="self-pwd-confirm"
+                    type={showSelfPwdConfirm ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdConfirm}
+                    onChange={(e) => setSelfPwdConfirm(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSelfPwdConfirm((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {showSelfPwdConfirm ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+              </div>
+
+              {selfPwdError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {selfPwdError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeSelfPasswordModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={selfPwdLoading}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={selfPwdLoading}
+                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {selfPwdLoading ? "Menyimpan..." : "Simpan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
+}
+
+/* ----------------------- helpers ----------------------- */
+
+function formatDateTime(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
+}
+
+function formatKind(kind: string) {
+  if (kind === "TOPUP") return "Topup";
+  if (kind === "ADJUSTMENT") return "Adjustment (-)";
+  if (kind === "BOX_PURCHASE") return "Beli box";
+  return kind;
+}
+
+function kindBadgeClass(kind: string) {
+  if (kind === "TOPUP") return "border-emerald-500/60 bg-emerald-950/50 text-emerald-200";
+  if (kind === "ADJUSTMENT" || kind === "BOX_PURCHASE")
+    return "border-rose-500/60 bg-rose-950/50 text-rose-200";
+  return "border-slate-500/60 bg-slate-900/60 text-slate-200";
+}
+
+function deltaText(delta: number) {
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const abs = Math.abs(delta);
+  return `${sign}${abs} credit`;
+}
+
+function deltaClass(delta: number) {
+  if (delta > 0) return "text-emerald-300";
+  if (delta < 0) return "text-rose-300";
+  return "text-slate-200";
 }
