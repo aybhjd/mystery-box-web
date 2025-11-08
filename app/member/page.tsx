@@ -62,7 +62,12 @@ type OpenRow = {
   processed_at: string | null; // <— baru
 };
 
-type TopupRow = { created_at: string; amount: number; note?: string | null; source?: string | null };
+type TopupRow = {
+  created_at: string;
+  delta: number;
+  note?: string | null;
+  kind: 'TOPUP' | 'ADJUSTMENT' | string;
+};
 
 /* =========================
    Helpers
@@ -498,29 +503,25 @@ export default function MemberHomePage() {
       const to   = endOfDayLocalISO(histDate);
 
       try {
-        // --- 1) TOPUP: coba 'credit_ledgers', fallback 'credit_mutations'
+        // --- TOPUP & ADJUSTMENT dari credit_ledger (singular)
         let tu: TopupRow[] = [];
-        // a) credit_ledgers
-        let r1 = await supabase
+
+        const r1 = await supabase
           .from("credit_ledger")
-          .select("created_at, amount, description, source")
+          .select("created_at, delta, description, kind")
           .eq("member_profile_id", profile.id)
+          .in("kind", ["TOPUP", "ADJUSTMENT"])  // tampilkan keduanya
           .gte("created_at", from).lte("created_at", to)
-          .gt("amount", 0)
+          .neq("delta", 0)                       // skip nol
           .order("created_at", { ascending: false });
 
-        if (!r1.error) {
-          tu = (r1.data ?? []).map((x: any) => ({ created_at: x.created_at, amount: x.amount, note: x.description ?? null, source: x.source ?? null }));
-        } else {
-          // b) credit_mutations (fallback)
-          const r2 = await supabase
-            .from("credit_mutations")
-            .select("created_at, amount, description")
-            .eq("member_profile_id", profile.id)
-            .gte("created_at", from).lte("created_at", to)
-            .gt("amount", 0)
-            .order("created_at", { ascending: false });
-          if (!r2.error) tu = (r2.data ?? []).map((x: any) => ({ created_at: x.created_at, amount: x.amount, note: x.description ?? null }));
+        if (!r1.error && r1.data) {
+          tu = r1.data.map((x: any) => ({
+            created_at: x.created_at,
+            delta: x.delta,
+            note: x.description ?? null,
+            kind: x.kind,
+          }));
         }
         setTopups(tu);
 
@@ -1040,22 +1041,31 @@ export default function MemberHomePage() {
               {/* Top Up */}
               <details className="group rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden">
                 <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-200">Riwayat Top Up</span>
+                  <span className="text-sm font-semibold text-slate-200">Riwayat Top Up & Adjustment</span>
                   <span className="text-xs text-slate-400">{topups.length} entri</span>
                 </summary>
                 {topups.length === 0 ? (
                   <div className="px-4 pb-4 text-xs text-slate-400">Tidak ada top up pada tanggal ini.</div>
                 ) : (
                   <ul className="px-2 pb-2 divide-y divide-slate-800/70">
-                    {topups.map((t, i) => (
-                      <li key={i} className="flex items-center justify-between gap-3 px-2 py-2">
-                        <div className="min-w-0">
-                          <div className="text-[11px] text-slate-400">{formatDateTime(t.created_at)}</div>
-                          <div className="text-xs text-slate-300 truncate">{t.note || t.source || "Top up"}</div>
-                        </div>
-                        <div className="text-xs font-bold text-emerald-300">+{formatIDR(t.amount)} credit</div>
-                      </li>
-                    ))}
+                    {topups.map((t, i) => {
+                      const isTopup = t.kind === "TOPUP" && t.delta > 0;
+                      const abs = Math.abs(t.delta);
+
+                      return (
+                        <li key={i} className="flex items-center justify-between gap-3 px-2 py-2">
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-slate-400">{formatDateTime(t.created_at)}</div>
+                            <div className="text-xs text-slate-300 truncate">
+                              {t.note || (isTopup ? "Top up" : "Adjustment")}
+                            </div>
+                          </div>
+                          <div className={`text-xs font-bold ${isTopup ? "text-emerald-300" : "text-rose-300"}`}>
+                            {isTopup ? "+" : "−"}{formatIDR(abs)} credit
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </details>
