@@ -709,7 +709,7 @@ export default function MemberHomePage() {
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 mb-5 md:mb-7">
           <div className="flex items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-900/40 px-3 py-2 backdrop-blur-sm">
             <span className="text-[11px] text-slate-300/80">Login sebagai</span>
 
@@ -788,7 +788,7 @@ export default function MemberHomePage() {
                   </button>
 
                   {/* Info pindah ke bawah tombol */}
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-[11px] md:text-xs text-center text-slate-400">
                     {tier === 1 && "Minimal dapat Common. Cocok buat coba peruntungan."}
                     {tier === 2 && "Start dari Rare ke atas. Common tidak mungkin keluar."}
                     {tier === 3 && "Start dari Epic ke atas. Common & Rare tidak mungkin keluar."}
