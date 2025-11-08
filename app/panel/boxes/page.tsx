@@ -343,7 +343,7 @@ export default function PanelBoxesPage() {
         // Border gradasi + teks gradasi, inner pill tetap gelap.
         return (
           <span className="inline-flex rounded-full p-[1px] bg-[linear-gradient(90deg,#22d3ee,#60a5fa,#a78bfa,#fde047,#fb923c)] shadow-[0_0_0_3px_rgba(59,130,246,.20)]">
-            <span className={`${base} rounded-full bg-slate-900/60 ring-1 ring-white/10`}>
+            <span className={`${base} rounded-full bg-slate-950 ring-1 ring-white/10 isolate`}>
               <span className="bg-clip-text text-transparent bg-[linear-gradient(90deg,#22d3ee,#60a5fa,#a78bfa,#fde047,#fb923c)]">
                 Special Legendary
               </span>
