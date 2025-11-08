@@ -70,6 +70,17 @@ function formatIDR(n?: number | null) {
   try { return new Intl.NumberFormat("id-ID").format(n); } catch { return String(n); }
 }
 
+function startOfDayLocalISO(dateStr: string) {
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+function endOfDayLocalISO(dateStr: string) {
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+}
+
 function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function rnd(min: number, max: number) { return Math.random() * (max - min) + min; }
 
@@ -453,6 +464,95 @@ export default function MemberHomePage() {
   const [lastOpened, setLastOpened] = useState<OpenBoxResult | null>(null);
 
   const [rarityMap, setRarityMap] = useState< Record<string, { code: string; name: string; color_key: string; sort_order?: number }> >({});
+
+  // ===== Histories state =====
+  type TopupRow = { created_at: string; amount: number; note?: string | null; source?: string | null };
+
+  const [histDate, setHistDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError] = useState<string | null>(null);
+
+  const [topups, setTopups] = useState<TopupRow[]>([]);
+  const [purchasesHist, setPurchasesHist] = useState<Array<{ id:string; created_at:string; credit_tier:number; rarity_id:string|null; status:string }>>([]);
+  const [opensHist, setOpensHist] = useState<Array<{ id:string; opened_at:string; credit_tier:number; rarity_id:string|null; reward_id:string|null }>>([]);
+  const [rewardsMap, setRewardsMap] = useState<Record<string, { label:string; reward_type:"CASH"|"ITEM"; amount:number|null }>>({});
+
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const load = async () => {
+      setHistLoading(true);
+      setHistError(null);
+
+      const from = startOfDayLocalISO(histDate);
+      const to   = endOfDayLocalISO(histDate);
+
+      try {
+        // --- 1) TOPUP: coba 'credit_ledgers', fallback 'credit_mutations'
+        let tu: TopupRow[] = [];
+        // a) credit_ledgers
+        let r1 = await supabase
+          .from("credit_ledgers")
+          .select("created_at, amount, description, source")
+          .eq("member_profile_id", profile.id)
+          .gte("created_at", from).lte("created_at", to)
+          .gt("amount", 0)
+          .order("created_at", { ascending: false });
+
+        if (!r1.error) {
+          tu = (r1.data ?? []).map((x: any) => ({ created_at: x.created_at, amount: x.amount, note: x.description ?? null, source: x.source ?? null }));
+        } else {
+          // b) credit_mutations (fallback)
+          const r2 = await supabase
+            .from("credit_mutations")
+            .select("created_at, amount, description")
+            .eq("member_profile_id", profile.id)
+            .gte("created_at", from).lte("created_at", to)
+            .gt("amount", 0)
+            .order("created_at", { ascending: false });
+          if (!r2.error) tu = (r2.data ?? []).map((x: any) => ({ created_at: x.created_at, amount: x.amount, note: x.description ?? null }));
+        }
+        setTopups(tu);
+
+        // --- 2) Pembelian Box
+        const rBuy = await supabase
+          .from("box_transactions")
+          .select("id, created_at, credit_tier, rarity_id, status")
+          .eq("member_profile_id", profile.id)
+          .gte("created_at", from).lte("created_at", to)
+          .order("created_at", { ascending: false });
+        setPurchasesHist((rBuy.data ?? []) as any);
+
+        // --- 3) Buka Box
+        const rOpen = await supabase
+          .from("box_transactions")
+          .select("id, opened_at, credit_tier, rarity_id, reward_id")
+          .eq("member_profile_id", profile.id)
+          .not("opened_at", "is", null)
+          .gte("opened_at", from).lte("opened_at", to)
+          .order("opened_at", { ascending: false });
+        const openedRows = (rOpen.data ?? []) as any[];
+
+        // ambil label reward (optional, kalau FK ada)
+        const ids = Array.from(new Set(openedRows.map(x => x.reward_id).filter(Boolean)));
+        let map: Record<string, any> = {};
+        if (ids.length) {
+          const rr = await supabase.from("box_rewards").select("id, label, reward_type, amount").in("id", ids);
+          if (!rr.error && rr.data) {
+            rr.data.forEach((r: any) => (map[r.id] = { label: r.label, reward_type: r.reward_type, amount: r.amount ?? null }));
+          }
+        }
+        setRewardsMap(map);
+        setOpensHist(openedRows);
+      } catch (e: any) {
+        setHistError("Gagal memuat riwayat.");
+      } finally {
+        setHistLoading(false);
+      }
+    };
+
+    load();
+  }, [profile?.id, histDate, supabase]);
 
   // sfx
   const sfxClick = useRef<HTMLAudioElement | null>(null);
@@ -894,6 +994,113 @@ export default function MemberHomePage() {
                 <div className="text-xs text-slate-300">Rarity {lastOpened.rarity_name} • Hadiah <span className="font-semibold">{lastOpened.reward_label}</span>{lastOpened.reward_type === "CASH" && <> (+{formatIDR(lastOpened.reward_amount)} saldo)</>}</div>
               </>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ====== RIWAYAT (filter + accordion) ====== */}
+      <div className="mt-6 rounded-2xl border border-slate-700/70 bg-slate-950/80">
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-700/70">
+          <div className="text-sm font-semibold text-slate-200">Riwayat</div>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="text-xs text-slate-300">Tanggal</label>
+            <input
+              type="date"
+              value={histDate}
+              onChange={(e) => setHistDate(e.target.value)}
+              className="text-xs rounded-md bg-slate-900/70 border border-slate-600/60 px-2 py-1 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {histLoading ? (
+          <div className="px-4 py-6 text-sm text-slate-400">Memuat riwayat…</div>
+        ) : histError ? (
+          <div className="px-4 py-6 text-sm text-rose-300">{histError}</div>
+        ) : (
+          <div className="px-2 md:px-3 py-3 space-y-3">
+            {/* Top Up */}
+            <details className="group rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden">
+              <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-200">Riwayat Top Up</span>
+                <span className="text-xs text-slate-400">{topups.length} entri</span>
+              </summary>
+              {topups.length === 0 ? (
+                <div className="px-4 pb-4 text-xs text-slate-400">Tidak ada top up pada tanggal ini.</div>
+              ) : (
+                <ul className="px-2 pb-2 divide-y divide-slate-800/70">
+                  {topups.map((t, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 px-2 py-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] text-slate-400">{formatDateTime(t.created_at)}</div>
+                        <div className="text-xs text-slate-300 truncate">{t.note || t.source || "Top up"}</div>
+                      </div>
+                      <div className="text-xs font-bold text-emerald-300">+{formatIDR(t.amount)} credit</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+
+            {/* Pembelian Box */}
+            <details className="group rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden">
+              <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-200">Riwayat Pembelian Box</span>
+                <span className="text-xs text-slate-400">{purchasesHist.length} transaksi</span>
+              </summary>
+              {purchasesHist.length === 0 ? (
+                <div className="px-4 pb-4 text-xs text-slate-400">Tidak ada pembelian pada tanggal ini.</div>
+              ) : (
+                <ul className="px-2 pb-2 divide-y divide-slate-800/70">
+                  {purchasesHist.map((p) => {
+                    const rar = p.rarity_id ? rarityMap[p.rarity_id] : undefined;
+                    return (
+                      <li key={p.id} className="flex items-center justify-between gap-3 px-2 py-2">
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-slate-400">{formatDateTime(p.created_at)}</div>
+                          <div className="text-xs text-slate-300 flex items-center gap-2">
+                            Beli Box {p.credit_tier} credit
+                            {rar && renderRarityBadge(rar.color_key, rar.name)}
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-slate-400 shrink-0">{p.status}</div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </details>
+
+            {/* Buka Box */}
+            <details className="group rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden">
+              <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-200">Riwayat Buka Box</span>
+                <span className="text-xs text-slate-400">{opensHist.length} transaksi</span>
+              </summary>
+              {opensHist.length === 0 ? (
+                <div className="px-4 pb-4 text-xs text-slate-400">Tidak ada pembukaan box pada tanggal ini.</div>
+              ) : (
+                <ul className="px-2 pb-2 divide-y divide-slate-800/70">
+                  {opensHist.map((o) => {
+                    const rar = o.rarity_id ? rarityMap[o.rarity_id] : undefined;
+                    const rw  = o.reward_id ? rewardsMap[o.reward_id] : undefined;
+                    const label = rw ? (rw.reward_type === "CASH" ? `${rw.label} (Rp ${formatIDR(rw.amount)})` : rw.label) : "—";
+                    return (
+                      <li key={o.id} className="flex items-center justify-between gap-3 px-2 py-2">
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-slate-400">{formatDateTime(o.opened_at)}</div>
+                          <div className="text-xs text-slate-300 flex items-center gap-2">
+                            Buka Box {o.credit_tier} • {label}
+                            {rar && renderRarityBadge(rar.color_key, rar.name)}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </details>
           </div>
         )}
       </div>
