@@ -218,8 +218,6 @@ function FXOverlay({
 
   if (!open) return null;
 
-  const rarHeader = rarityInfo.rarityId ? rarityMap[rarityInfo.rarityId] : undefined;
-
   return (
     <div className="fixed inset-0 z-[75] overflow-hidden">
       {/* flash hanya ketika transisi ke reveal */}
@@ -864,7 +862,11 @@ export default function MemberHomePage() {
         title={
           <div className="flex items-center gap-2">
             <span>Drop</span>
-            {rarHeader && renderRarityBadge(rarHeader.color_key, rarHeader.name)}
+            {rarityInfo.rarityId && rarityMap[rarityInfo.rarityId] &&
+              renderRarityBadge(
+                rarityMap[rarityInfo.rarityId].color_key,
+                rarityMap[rarityInfo.rarityId].name
+              )}
           </div>
         }
       >
