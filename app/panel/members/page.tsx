@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  FormEvent,
-  useEffect,
-  useState
-} from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -93,9 +89,55 @@ export default function PanelMembersPage() {
   const [newShowPwd, setNewShowPwd] = useState(false);
   const [newShowPwdConfirm, setNewShowPwdConfirm] = useState(false);
 
+  // ---- pagination ----
+  const PAGE_SIZE = 25;
+  const FETCH_CHUNK = 1000; // ambil per 1000 baris sampai habis
+  const [page, setPage] = useState(1);
+
   // === Apply filters only on Enter / Search ===
   function applyFilters() {
+    const isEmpty = filterUsername.trim() === "";
+
     setAppliedFilterUsername(filterUsername.trim());
+    setPage(1); // setiap apply, kembali ke halaman 1
+
+    // klik/Enter saat filter kosong => reload dari DB
+    if (isEmpty && currentProfile?.tenant_id) {
+      void fetchMembers(currentProfile.tenant_id);
+    }
+  }
+
+  async function fetchMembers(tenantId: string) {
+    setLoading(true);
+    setError(null);
+
+    try {
+      let from = 0;
+      let batch: MemberRow[] = [];
+      const all: MemberRow[] = [];
+
+      do {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, username, credit_balance, created_at")
+          .eq("tenant_id", tenantId)
+          .eq("role", "MEMBER")
+          .order("created_at", { ascending: true })
+          .range(from, from + FETCH_CHUNK - 1);
+
+        if (error) throw error;
+        batch = (data || []) as MemberRow[];
+        all.push(...batch);
+        from += FETCH_CHUNK;
+      } while (batch.length === FETCH_CHUNK);
+
+      setMembers(all);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError("Gagal mengambil daftar member.");
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -157,23 +199,7 @@ export default function PanelMembersPage() {
 
       setCurrentProfile(profile);
 
-      // 3) Ambil semua member di tenant yang sama
-      const { data: memberRows, error: membersError } = await supabase
-        .from("profiles")
-        .select("id, username, credit_balance, created_at")
-        .eq("tenant_id", profile.tenant_id)
-        .eq("role", "MEMBER")
-        .order("created_at", { ascending: true });
-
-      if (membersError) {
-        console.error(membersError);
-        setError("Gagal mengambil daftar member.");
-        setLoading(false);
-        return;
-      }
-
-      setMembers(memberRows ?? []);
-      setLoading(false);
+      await fetchMembers(profile.tenant_id);
     }
 
     load();
@@ -577,6 +603,21 @@ export default function PanelMembersPage() {
     return u.includes(appliedFilterUsername.toLowerCase());
   });
 
+  // jaga validitas page saat jumlah hasil berubah
+  useEffect(() => {
+    const total = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
+    if (page > total) setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredMembers.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
+  const startIndex = (page - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, filteredMembers.length);
+
+  const pagedMembers = useMemo(() => {
+    return filteredMembers.slice(startIndex, endIndex);
+  }, [filteredMembers, startIndex, endIndex, page]);
+
   const displayName =
     currentProfile?.username || currentUserEmail || "Akun Panel";
 
@@ -706,7 +747,7 @@ export default function PanelMembersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredMembers.map((m) => (
+                  pagedMembers.map((m) => (
                     <tr
                       key={m.id}
                       className="border-t border-slate-800/80 hover:bg-slate-800/60"
@@ -750,6 +791,35 @@ export default function PanelMembersPage() {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Pagination */}
+      <div className="p-3 flex flex-col gap-2 items-center justify-between md:flex-row">
+        <p className="text-[11px] text-slate-500">
+          Menampilkan {filteredMembers.length === 0 ? 0 : startIndex + 1}
+          –{endIndex} dari {filteredMembers.length} hasil (25/baris)
+        </p>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            ‹ Prev
+          </button>
+          <span className="text-[11px] text-slate-300">
+            Halaman {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            Next ›
+          </button>
+        </div>
       </div>
 
       {/* Modal Self Password */}
