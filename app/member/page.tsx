@@ -776,7 +776,7 @@ export default function MemberHomePage() {
 
         <div>
           <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
-            MYSTERY BOX {tenantName ? `(${tenantName})` : ""}
+            MYSTERY BOX {tenantName ? `${tenantName}` : ""}
           </h1>
           <p className="mt-2 text-sm text-slate-200/85">Buka BOX, kejar hadiah Langka, dan claim hadiahmu.</p>
           <div className="mt-4 h-[2px] w-44 rounded-full bg-gradient-to-r from-fuchsia-400/80 via-amber-300/90 to-transparent" />
