@@ -291,7 +291,7 @@ export default function PanelBoxesPage() {
   function rarityBadge(r: RarityRow) {
     // Pill dengan border berwarna + ring + subtle outer glow.
     const base =
-      "inline-flex items-center rounded-full px-1.5 py-.5 text-sm font-bold";
+      "inline-flex items-center rounded-full px-1 py-1 text-sm font-bold";
 
     switch (r.code) {
       case "COMMON":
