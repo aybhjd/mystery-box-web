@@ -43,8 +43,9 @@ export default function PanelMembersPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter username
+  // Filter username (input & applied)
   const [filterUsername, setFilterUsername] = useState("");
+  const [appliedFilterUsername, setAppliedFilterUsername] = useState("");
 
   // Dropdown akun sendiri
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -53,6 +54,8 @@ export default function PanelMembersPage() {
   const [selfPwdConfirm, setSelfPwdConfirm] = useState("");
   const [selfPwdError, setSelfPwdError] = useState<string | null>(null);
   const [selfPwdLoading, setSelfPwdLoading] = useState(false);
+  const [selfPwdShowNew, setSelfPwdShowNew] = useState(false);
+  const [selfPwdShowConfirm, setSelfPwdShowConfirm] = useState(false);
 
   // Modal Topup
   const [topupMember, setTopupMember] = useState<MemberRow | null>(null);
@@ -76,6 +79,8 @@ export default function PanelMembersPage() {
   const [memberPwdConfirm, setMemberPwdConfirm] = useState("");
   const [memberPwdError, setMemberPwdError] = useState<string | null>(null);
   const [memberPwdLoading, setMemberPwdLoading] = useState(false);
+  const [memberPwdShowNew, setMemberPwdShowNew] = useState(false);
+  const [memberPwdShowConfirm, setMemberPwdShowConfirm] = useState(false);
 
   // Modal New Member
   const [newMemberModalOpen, setNewMemberModalOpen] = useState(false);
@@ -85,6 +90,13 @@ export default function PanelMembersPage() {
   const [newInitialCredit, setNewInitialCredit] = useState("");
   const [newMemberError, setNewMemberError] = useState<string | null>(null);
   const [newMemberLoading, setNewMemberLoading] = useState(false);
+  const [newShowPwd, setNewShowPwd] = useState(false);
+  const [newShowPwdConfirm, setNewShowPwdConfirm] = useState(false);
+
+  // === Apply filters only on Enter / Search ===
+  function applyFilters() {
+    setAppliedFilterUsername(filterUsername.trim());
+  }
 
   useEffect(() => {
     async function load() {
@@ -167,6 +179,27 @@ export default function PanelMembersPage() {
     load();
   }, [router]);
 
+  // ESC to close any open modal
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (selfPwdModalOpen) closeSelfPasswordModal();
+        if (newMemberModalOpen) closeNewMemberModal();
+        if (topupMember) closeTopupModal();
+        if (adjustMember) closeAdjustModal();
+        if (memberPwdMember) closeMemberPasswordModal();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    selfPwdModalOpen,
+    newMemberModalOpen,
+    topupMember,
+    adjustMember,
+    memberPwdMember
+  ]);
+
   function formatDate(iso: string) {
     try {
       const d = new Date(iso);
@@ -200,6 +233,8 @@ export default function PanelMembersPage() {
     setSelfPwdConfirm("");
     setSelfPwdError(null);
     setSelfPwdLoading(false);
+    setSelfPwdShowNew(false);
+    setSelfPwdShowConfirm(false);
   }
 
   async function handleSelfPasswordSubmit(e: FormEvent) {
@@ -385,6 +420,8 @@ export default function PanelMembersPage() {
     setMemberPwdNew("");
     setMemberPwdConfirm("");
     setMemberPwdError(null);
+    setMemberPwdShowNew(false);
+    setMemberPwdShowConfirm(false);
   }
 
   function closeMemberPasswordModal() {
@@ -393,6 +430,8 @@ export default function PanelMembersPage() {
     setMemberPwdConfirm("");
     setMemberPwdError(null);
     setMemberPwdLoading(false);
+    setMemberPwdShowNew(false);
+    setMemberPwdShowConfirm(false);
   }
 
   async function handleMemberPasswordSubmit(e: FormEvent) {
@@ -452,6 +491,8 @@ export default function PanelMembersPage() {
     setNewPasswordConfirm("");
     setNewInitialCredit("");
     setNewMemberError(null);
+    setNewShowPwd(false);
+    setNewShowPwdConfirm(false);
   }
 
   function closeNewMemberModal() {
@@ -462,6 +503,8 @@ export default function PanelMembersPage() {
     setNewInitialCredit("");
     setNewMemberError(null);
     setNewMemberLoading(false);
+    setNewShowPwd(false);
+    setNewShowPwdConfirm(false);
   }
 
   async function handleNewMemberSubmit(e: FormEvent) {
@@ -529,9 +572,9 @@ export default function PanelMembersPage() {
   }
 
   const filteredMembers = members.filter((m) => {
-    if (!filterUsername.trim()) return true;
+    if (!appliedFilterUsername) return true;
     const u = (m.username || "").toLowerCase();
-    return u.includes(filterUsername.trim().toLowerCase());
+    return u.includes(appliedFilterUsername.toLowerCase());
   });
 
   const displayName =
@@ -587,18 +630,31 @@ export default function PanelMembersPage() {
         </div>
 
         {/* Filter + New Member */}
-        <div className="flex flex-col md:flex-row md:items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-end gap-3">
           <div className="flex-1">
             <label className="text-xs font-medium text-slate-400 block mb-1">
               Filter username
             </label>
-            <input
-              type="text"
-              value={filterUsername}
-              onChange={(e) => setFilterUsername(e.target.value)}
-              placeholder="cari username..."
-              className="w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={filterUsername}
+                onChange={(e) => setFilterUsername(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters();
+                }}
+                placeholder="cari username..."
+                className="w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={applyFilters}
+                className="inline-flex items-center rounded-lg border border-cyan-500/70 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/10 transition"
+                title="Cari"
+              >
+                Search
+              </button>
+            </div>
           </div>
 
           <button
@@ -611,7 +667,7 @@ export default function PanelMembersPage() {
         </div>
 
         {loading && (
-          <p className="text-sm text-slate-300">Memuat data member...</p>
+          <p className="text-sm text-slate-3 00">Memuat data member...</p>
         )}
 
         {!loading && error && (
@@ -698,22 +754,37 @@ export default function PanelMembersPage() {
 
       {/* Modal Self Password */}
       {selfPwdModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeSelfPasswordModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold">Ubah password akun saya</h2>
             <form onSubmit={handleSelfPasswordSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="self-pwd-new">
                   Password baru
                 </label>
-                <input
-                  id="self-pwd-new"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  value={selfPwdNew}
-                  onChange={(e) => setSelfPwdNew(e.target.value)}
-                  placeholder="min. 6 karakter"
-                />
+                <div className="relative">
+                  <input
+                    id="self-pwd-new"
+                    type={selfPwdShowNew ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdNew}
+                    onChange={(e) => setSelfPwdNew(e.target.value)}
+                    placeholder="min. 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelfPwdShowNew((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {selfPwdShowNew ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -723,13 +794,22 @@ export default function PanelMembersPage() {
                 >
                   Konfirmasi password baru
                 </label>
-                <input
-                  id="self-pwd-confirm"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  value={selfPwdConfirm}
-                  onChange={(e) => setSelfPwdConfirm(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    id="self-pwd-confirm"
+                    type={selfPwdShowConfirm ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdConfirm}
+                    onChange={(e) => setSelfPwdConfirm(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelfPwdShowConfirm((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {selfPwdShowConfirm ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
               </div>
 
               {selfPwdError && (
@@ -762,8 +842,14 @@ export default function PanelMembersPage() {
 
       {/* Modal New Member */}
       {newMemberModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeNewMemberModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold">New Member</h2>
 
             <form onSubmit={handleNewMemberSubmit} className="space-y-4">
@@ -784,26 +870,60 @@ export default function PanelMembersPage() {
                 <label className="text-sm font-medium" htmlFor="nm-password">
                   Password
                 </label>
-                <input
-                  id="nm-password"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    id="nm-password"
+                    type={newShowPwd ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewShowPwd((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {newShowPwd ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="nm-password-confirm">
                   Konfirmasi password
                 </label>
+                <div className="relative">
+                  <input
+                    id="nm-password-confirm"
+                    type={newShowPwdConfirm ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    placeholder="ulang password"
+                    value={newPasswordConfirm}
+                    onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewShowPwdConfirm((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {newShowPwdConfirm ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="nm-initial-credit">
+                  Initial credit (opsional)
+                </label>
                 <input
-                  id="nm-password-confirm"
-                  type="password"
+                  id="nm-initial-credit"
+                  type="number"
+                  min={0}
+                  step={1}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="ulang password"
-                  value={newPasswordConfirm}
-                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                  placeholder="contoh: 10"
+                  value={newInitialCredit}
+                  onChange={(e) => setNewInitialCredit(e.target.value)}
                 />
               </div>
 
@@ -842,8 +962,14 @@ export default function PanelMembersPage() {
 
       {/* Modal Topup */}
       {topupMember && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeTopupModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold">
               Topup Credit – {topupMember.username ?? "Tanpa username"}
             </h2>
@@ -915,8 +1041,14 @@ export default function PanelMembersPage() {
 
       {/* Modal Adjust */}
       {adjustMember && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeAdjustModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold">
               Adjust Credit (–) – {adjustMember.username ?? "Tanpa username"}
             </h2>
@@ -988,8 +1120,14 @@ export default function PanelMembersPage() {
 
       {/* Modal Password Member */}
       {memberPwdMember && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeMemberPasswordModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold">
               Ubah password member –{" "}
               {memberPwdMember.username ?? "Tanpa username"}
@@ -1003,14 +1141,23 @@ export default function PanelMembersPage() {
                 >
                   Password baru
                 </label>
-                <input
-                  id="member-pwd-new"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                  value={memberPwdNew}
-                  onChange={(e) => setMemberPwdNew(e.target.value)}
-                  placeholder="min. 6 karakter"
-                />
+                <div className="relative">
+                  <input
+                    id="member-pwd-new"
+                    type={memberPwdShowNew ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                    value={memberPwdNew}
+                    onChange={(e) => setMemberPwdNew(e.target.value)}
+                    placeholder="min. 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMemberPwdShowNew((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {memberPwdShowNew ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -1020,13 +1167,22 @@ export default function PanelMembersPage() {
                 >
                   Konfirmasi password baru
                 </label>
-                <input
-                  id="member-pwd-confirm"
-                  type="password"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                  value={memberPwdConfirm}
-                  onChange={(e) => setMemberPwdConfirm(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    id="member-pwd-confirm"
+                    type={memberPwdShowConfirm ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                    value={memberPwdConfirm}
+                    onChange={(e) => setMemberPwdConfirm(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMemberPwdShowConfirm((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {memberPwdShowConfirm ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
               </div>
 
               {memberPwdError && (
