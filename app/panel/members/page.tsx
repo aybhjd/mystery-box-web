@@ -790,36 +790,35 @@ export default function PanelMembersPage() {
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          <div className="p-3 flex flex-col gap-2 items-center justify-between md:flex-row">
+            <p className="text-[11px] text-slate-500">
+              Menampilkan {filteredMembers.length === 0 ? 0 : startIndex + 1}
+              –{endIndex} dari {filteredMembers.length} hasil (25/baris)
+            </p>
+            <div className="inline-flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                ‹ Prev
+              </button>
+              <span className="text-[11px] text-slate-300">
+                Halaman {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Next ›
+              </button>
+            </div>
+          </div>
         )}
-      </div>
-
-      {/* Pagination */}
-      <div className="p-3 flex flex-col gap-2 items-center justify-between md:flex-row">
-        <p className="text-[11px] text-slate-500">
-          Menampilkan {filteredMembers.length === 0 ? 0 : startIndex + 1}
-          –{endIndex} dari {filteredMembers.length} hasil (25/baris)
-        </p>
-        <div className="inline-flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          >
-            ‹ Prev
-          </button>
-          <span className="text-[11px] text-slate-300">
-            Halaman {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          >
-            Next ›
-          </button>
-        </div>
       </div>
 
       {/* Modal Self Password */}
