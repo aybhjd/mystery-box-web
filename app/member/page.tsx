@@ -526,7 +526,7 @@ export default function MemberHomePage() {
         // --- 3) Buka Box
         const rOpen = await supabase
           .from("box_transactions")
-          .select("id, opened_at, credit_tier, rarity_id, reward_id")
+          .select("id, opened_at, credit_tier, rarity_id, reward_id, processed, processed_at")
           .eq("member_profile_id", profile.id)
           .not("opened_at", "is", null)
           .gte("opened_at", from).lte("opened_at", to)
@@ -1093,6 +1093,18 @@ export default function MemberHomePage() {
                               {rar && renderRarityBadge(rar.color_key, rar.name)}
                             </div>
                           </div>
+
+                          {/* status processed */}
+                          <span
+                            className={[
+                              "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              o.processed ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                          : "bg-amber-500/15 text-amber-300 border border-amber-500/30",
+                            ].join(" ")}
+                            title={o.processed ? (o.processed_at ? `Diproses ${formatDateTime(o.processed_at)}` : "Sudah diproses") : "Menunggu diproses"}
+                          >
+                            {o.processed ? "Sudah diproses" : "Belum diproses"}
+                          </span>
                         </li>
                       );
                     })}
