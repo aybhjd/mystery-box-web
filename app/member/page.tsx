@@ -112,7 +112,7 @@ function renderRarityBadge(colorKey?: string, label?: string) {
         {/* Inner = pill GELAP solid (jangan pakai /opacity) */}
         <span className="rounded-full bg-slate-950 px-2 py-[2px] text-[10px] font-semibold ring-1 ring-white/10 isolate">
           {/* Teks saja yang gradasi */}
-          <span className="bg-clip-text text-transparent bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#fde047,#fb923c)]">
+          <span className="font-bold bg-clip-text text-transparent bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#fde047,#fb923c)]">
             {label ?? "Special Legendary"}
           </span>
         </span>
