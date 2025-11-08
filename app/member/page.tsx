@@ -101,6 +101,23 @@ function rarityBadgeClasses(colorKey?: string) {
     default: return `${base} text-slate-200 border-slate-400/40 bg-slate-900/40`;
   }
 }
+function renderRarityBadge(colorKey?: string, label?: string) {
+  const key = (colorKey || "").toLowerCase();
+
+  // Khusus "rainbow": border gradasi + teks gradasi, inner gelap solid (tidak tembus)
+  if (key === "rainbow") {
+    return (
+      <span className="inline-flex rounded-full p-[2px] bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]">
+        <span className="text-[10px] font-semibold px-2 py-[2px] rounded-full border border-transparent bg-slate-950 text-transparent bg-clip-text bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]">
+          {label ?? "Special Legendary"}
+        </span>
+      </span>
+    );
+  }
+
+  // Lainnya tetap seperti semula (kelas dari rarityBadgeClasses)
+  return <span className={rarityBadgeClasses(colorKey)}>{label}</span>;
+}
 function badgeSrcFromCode(code: string) {
   const k = code?.toLowerCase() || "common";
   return `/fantasy/icons/badge_${k}.svg`;
@@ -773,7 +790,7 @@ export default function MemberHomePage() {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-100 flex items-center gap-2">
                         Box {box.credit_tier} Credit
-                        {rar && <span className={rarityBadgeClasses(rar.color_key)}>{rar.name}</span>}
+                        {rar && renderRarityBadge(rar.color_key, rar.name)}
                       </p>
                       <p className="text-[11px] text-slate-400">Kadaluarsa: <span className="font-medium">{formatDateTime(box.expires_at)}</span></p>
                     </div>
@@ -826,7 +843,7 @@ export default function MemberHomePage() {
           <ul className="space-y-2">
             {tierInfo.rows.map((r, idx) => (
               <li key={idx} className="flex items-center justify-between">
-                <div className="flex items-center gap-2"><span className={rarityBadgeClasses(r.color_key)}>{r.name}</span></div>
+                <div className="flex items-center gap-2">{renderRarityBadge(r.color_key, r.name)}</div>
                 <div className="font-semibold">{r.prob}%</div>
               </li>
             ))}
