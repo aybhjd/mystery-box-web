@@ -693,7 +693,7 @@ export default function MemberHomePage() {
   };
 
   return (
-    <main className="relative min-h-screen text-slate-100">
+    <main className="relative min-h-screen text-slate-100 isolate">
       {/* Fixed background (cross-browser, aman di iOS/Android/Desktop) */}
       <div
         aria-hidden="true"
