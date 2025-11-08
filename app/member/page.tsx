@@ -749,7 +749,7 @@ export default function MemberHomePage() {
               <div key={tier} className="group relative rounded-2xl p-[2px]" style={{ background: `linear-gradient(180deg, ${s.frameFrom}, ${s.frameTo})` }}>
                 <div className="rounded-2xl border border-slate-700/60 bg-slate-950/85 p-4">
                   {/* Ribbon */}
-                  <div className={`inline-flex items-center gap-1 rounded-full text-[10px] px-2 py-[2px] font-semibold bg-gradient-to-r ${s.ribbon} text-slate-900`}>
+                  <div className={`inline-flex items-center gap-1 rounded-full text-[10px] px-2 py-[2px] font-semibold bg-gradient-to-r ${s.ribbon} text-slate-900 origin-left scale-[1.12] transform-gpu will-change-transform`}>
                     {tier === 1 ? "TIER 1 • Starter" : tier === 2 ? "TIER 2 • Advance" : "TIER 3 • Elite"}
                   </div>
 
