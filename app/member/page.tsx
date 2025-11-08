@@ -484,7 +484,6 @@ export default function MemberHomePage() {
 
   const [topups, setTopups] = useState<TopupRow[]>([]);
   const [purchasesHist, setPurchasesHist] = useState<Array<{ id:string; created_at:string; credit_tier:number; rarity_id:string|null; status:string }>>([]);
-  const [opensHist, setOpensHist] = useState<Array<{ id:string; opened_at:string; credit_tier:number; rarity_id:string|null; reward_id:string|null }>>([]);
   const [rewardsMap, setRewardsMap] = useState<Record<string, { label:string; reward_type:"CASH"|"ITEM"; amount:number|null }>>({});
 
   useEffect(() => {
