@@ -107,9 +107,14 @@ function renderRarityBadge(colorKey?: string, label?: string) {
   // Khusus "rainbow": border gradasi + teks gradasi, inner gelap solid (tidak tembus)
   if (key === "rainbow") {
     return (
-      <span className="inline-flex rounded-full p-[2px] bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]">
-        <span className="text-[10px] font-semibold px-2 py-[2px] rounded-full border border-transparent bg-slate-950 text-transparent bg-clip-text bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#facc15,#ef4444)]">
-          {label ?? "Special Legendary"}
+      // Outer = BORDER gradasi
+      <span className="inline-flex rounded-full p-[2px] bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#fde047,#fb923c)]">
+        {/* Inner = pill GELAP solid (jangan pakai /opacity) */}
+        <span className="rounded-full bg-slate-950 px-2 py-[2px] text-[10px] font-semibold ring-1 ring-white/10 isolate">
+          {/* Teks saja yang gradasi */}
+          <span className="bg-clip-text text-transparent bg-[linear-gradient(90deg,#34d399,#38bdf8,#a78bfa,#fde047,#fb923c)]">
+            {label ?? "Special Legendary"}
+          </span>
         </span>
       </span>
     );
