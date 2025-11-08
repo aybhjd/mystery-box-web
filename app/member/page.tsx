@@ -62,6 +62,7 @@ type OpenRow = {
   processed_at: string | null; // <— baru
 };
 
+type TopupRow = { created_at: string; amount: number; note?: string | null; source?: string | null };
 
 /* =========================
    Helpers
