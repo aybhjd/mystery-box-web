@@ -502,7 +502,7 @@ export default function MemberHomePage() {
         let tu: TopupRow[] = [];
         // a) credit_ledgers
         let r1 = await supabase
-          .from("credit_ledgers")
+          .from("credit_ledger")
           .select("created_at, amount, description, source")
           .eq("member_profile_id", profile.id)
           .gte("created_at", from).lte("created_at", to)
