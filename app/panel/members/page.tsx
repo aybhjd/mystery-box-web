@@ -911,22 +911,6 @@ export default function PanelMembersPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="nm-initial-credit">
-                  Initial credit (opsional)
-                </label>
-                <input
-                  id="nm-initial-credit"
-                  type="number"
-                  min={0}
-                  step={1}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                  placeholder="contoh: 10"
-                  value={newInitialCredit}
-                  onChange={(e) => setNewInitialCredit(e.target.value)}
-                />
-              </div>
-
               {newMemberError && (
                 <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
                   {newMemberError}
