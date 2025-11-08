@@ -693,12 +693,20 @@ export default function MemberHomePage() {
   };
 
   return (
-    <main
-      className="relative min-h-screen text-slate-100"
-      style={{ backgroundImage: "url('/fantasy/bg.jpg')", backgroundSize: "cover", backgroundPosition: "center" }}
-    >
-      {/* overlay dipisah supaya bg.jpg terlihat & ringan */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }} />
+    <main className="relative min-h-screen text-slate-100">
+      {/* Fixed background (cross-browser, aman di iOS/Android/Desktop) */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 -z-10 bg-cover bg-center bg-no-repeat transform-gpu will-change-transform"
+        style={{ backgroundImage: "url('/fantasy/bg.jpg')" }}
+      />
+      {/* Fixed gradient tint di atas image, tetap di belakang konten */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 -z-10 pointer-events-none"
+        style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }}
+      />
+
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between">
