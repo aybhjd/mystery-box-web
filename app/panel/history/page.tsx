@@ -79,6 +79,7 @@ export default function PanelHistoryPage() {
   // ---- pagination (25 rows) ----
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
+  const FETCH_CHUNK = 1000;
 
   function applyFilters() {
     const isEmpty =
@@ -212,43 +213,50 @@ export default function PanelHistoryPage() {
     setRowsError(null);
 
     try {
-      const { data: txData, error: txErr } = await supabase
-        .from("box_transactions")
-        .select(`
-          id,
-          member_profile_id,
-          credit_tier,
-          credit_spent,
-          status,
-          expires_at,
-          opened_at,
-          processed,
-          processed_at,
-          processed_by_profile_id,
-          created_at,
-          rarity_id,
-          reward_id
-        `)
-        .eq("tenant_id", profile.tenant_id)
-        .order("created_at", { ascending: false })
-        .limit(100);
+      // --- ambil semua baris bertahap ---
+      let from = 0;
+      let batch: TxBase[] = [];
+      const allBaseRows: TxBase[] = [];
 
-      if (txErr) {
-        setRowsError("Gagal membaca history transaksi.");
-        setLoadingRows(false);
-        return;
-      }
+      do {
+        const { data, error } = await supabase
+          .from("box_transactions")
+          .select(`
+            id,
+            member_profile_id,
+            credit_tier,
+            credit_spent,
+            status,
+            expires_at,
+            opened_at,
+            processed,
+            processed_at,
+            processed_by_profile_id,
+            created_at,
+            rarity_id,
+            reward_id
+          `)
+          .eq("tenant_id", profile.tenant_id)
+          .order("created_at", { ascending: false })
+          .range(from, from + FETCH_CHUNK - 1);
 
-      const baseRows = (txData || []) as TxBase[];
-      if (baseRows.length === 0) {
+        if (error) throw error;
+
+        batch = (data || []) as TxBase[];
+        allBaseRows.push(...batch);
+        from += FETCH_CHUNK;
+      } while (batch.length === FETCH_CHUNK); // lanjut sampai batch terakhir < FETCH_CHUNK
+
+      if (allBaseRows.length === 0) {
         setRows([]);
         setLoadingRows(false);
         return;
       }
 
-      const memberIds = Array.from(new Set(baseRows.map((r) => r.member_profile_id)));
-      const rarityIds = Array.from(new Set(baseRows.map((r) => r.rarity_id)));
-      const rewardIds = Array.from(new Set(baseRows.map((r) => r.reward_id).filter((v): v is string => !!v)));
+      // --- join data member/rarity/reward seperti sebelumnya ---
+      const memberIds = Array.from(new Set(allBaseRows.map((r) => r.member_profile_id)));
+      const rarityIds = Array.from(new Set(allBaseRows.map((r) => r.rarity_id)));
+      const rewardIds = Array.from(new Set(allBaseRows.map((r) => r.reward_id).filter((v): v is string => !!v)));
 
       const [
         { data: memberData, error: memberErr },
@@ -276,7 +284,7 @@ export default function PanelHistoryPage() {
       const rarityMap = new Map((rarityData || []).map((r) => [r.id, r as RarityShort]));
       const rewardMap = new Map((rewardData || []).map((r) => [r.id, r as RewardShort]));
 
-      const fullRows: HistoryRow[] = baseRows.map((r) => ({
+      const fullRows: HistoryRow[] = allBaseRows.map((r) => ({
         ...r,
         member: memberMap.get(r.member_profile_id) || null,
         rarity: rarityMap.get(r.rarity_id) || null,
@@ -447,13 +455,6 @@ export default function PanelHistoryPage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Bar status jumlah */}
-      <div className="mb-3 flex justify-end">
-        <p className="text-[11px] text-slate-500">
-          Menampilkan {filteredRows.length} dari {rows.length} transaksi terakhir.
-        </p>
       </div>
 
       {/* Filter bar (NOT live) */}
