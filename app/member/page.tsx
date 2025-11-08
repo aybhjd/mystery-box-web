@@ -704,7 +704,7 @@ export default function MemberHomePage() {
       <div
         aria-hidden="true"
         className="fixed inset-0 -z-10 pointer-events-none"
-        style={{ background: "linear-gradient(180deg, rgba(7,11,19,.55), rgba(7,11,19,.78))" }}
+        style={{ background: "linear-gradient(180deg, rgba(7,11,19,.35), rgba(7,11,19,.56))" }}
       />
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8">
