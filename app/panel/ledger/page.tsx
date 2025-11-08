@@ -411,10 +411,6 @@ export default function PanelLedgerPage() {
             </div>
           </div>
         </div>
-
-        <p className="text-[11px] text-slate-500">
-          Menampilkan {filteredRows.length} dari {rows.length} mutasi terakhir.
-        </p>
       </div>
 
       {/* Tabel ledger */}
