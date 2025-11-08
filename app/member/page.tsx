@@ -131,7 +131,7 @@ function badgeSrcFromCode(code: string) {
 /* =========================
    Lightweight Modal
 ========================= */
-function Modal({ open, onClose, title, children, widthClass = "max-w-md" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; widthClass?: string; }) {
+function Modal({ open, onClose, title, children, widthClass = "max-w-md" }: { open: boolean; onClose: () => void; title: React.ReactNode; children: React.ReactNode; widthClass?: string; }) {
   return (
     <div className={`fixed inset-0 z-[70] transition-opacity duration-150 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`} aria-hidden={!open}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -217,6 +217,8 @@ function FXOverlay({
   }, [open, isReveal, variant]);
 
   if (!open) return null;
+
+  const rarHeader = rarityInfo.rarityId ? rarityMap[rarityInfo.rarityId] : undefined;
 
   return (
     <div className="fixed inset-0 z-[75] overflow-hidden">
@@ -658,7 +660,7 @@ export default function MemberHomePage() {
 
   const loadRarityInfo = async (rarityId: string) => {
     const rar = rarityMap[rarityId];
-    setRarityInfo({ open:true, loading:true, rarityId, title: rar ? `Drop ${rar.name}` : "Drop Reward", rows: [] });
+    setRarityInfo({ open: true, loading: false, rarityId, rows });
     const { data, error } = await supabase
       .from("box_rewards")
       .select("label, reward_type, amount, gimmick_probability, is_active")
@@ -856,7 +858,16 @@ export default function MemberHomePage() {
         )}
       </Modal>
 
-      <Modal open={rarityInfo.open} onClose={() => setRarityInfo({open:false})} title={rarityInfo.title ?? "Drop Reward"}>
+      <Modal
+        open={rarityInfo.open}
+        onClose={() => setRarityInfo({ open: false })}
+        title={
+          <div className="flex items-center gap-2">
+            <span>Drop</span>
+            {rarHeader && renderRarityBadge(rarHeader.color_key, rarHeader.name)}
+          </div>
+        }
+      >
         {rarityInfo.loading ? (
           <div className="text-slate-400">Memuat…</div>
         ) : (!rarityInfo.rows || rarityInfo.rows.length === 0) ? (
