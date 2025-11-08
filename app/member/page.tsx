@@ -745,7 +745,6 @@ export default function MemberHomePage() {
         </div>
 
         <div>
-          <div className="text-[10px] tracking-[0.28em] uppercase text-slate-300/80">MEMBER SITE</div>
           <h1 className="mt-1 text-4xl md:text-5xl font-extrabold tracking-widest leading-none bg-clip-text text-transparent [background-size:200%_100%] animate-[shimmer_7s_linear_infinite]" style={{ backgroundImage: "linear-gradient(90deg,#a78bfa 0%,#f472b6 35%,#fde68a 75%,#a78bfa 100%)" }}>
             MYSTERY BOX
           </h1>
