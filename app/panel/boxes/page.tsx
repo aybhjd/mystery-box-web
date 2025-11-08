@@ -89,6 +89,18 @@ export default function PanelBoxesPage() {
   const [rewardSaving, setRewardSaving] = useState(false);
   const [rewardError, setRewardError] = useState<string | null>(null);
 
+  // === Header akun (dropdown + modal ubah password) ===
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [selfPwdModalOpen, setSelfPwdModalOpen] = useState(false);
+  const [selfPwdNew, setSelfPwdNew] = useState("");
+  const [selfPwdConfirm, setSelfPwdConfirm] = useState("");
+  const [selfPwdError, setSelfPwdError] = useState<string | null>(null);
+  const [selfPwdLoading, setSelfPwdLoading] = useState(false);
+  const [showSelfPwdNew, setShowSelfPwdNew] = useState(false);
+  const [showSelfPwdConfirm, setShowSelfPwdConfirm] = useState(false);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -111,6 +123,7 @@ export default function PanelBoxesPage() {
         router.push("/panel/login");
         return;
       }
+      setCurrentUserEmail(user.email ?? null);
 
       // 2) Ambil profil
       const { data: prof, error: profErr } = await supabase
@@ -253,6 +266,14 @@ export default function PanelBoxesPage() {
 
     load();
   }, [router]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && selfPwdModalOpen) closeSelfPasswordModal();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selfPwdModalOpen]);
 
   const canEdit = profile?.role === "ADMIN";
 
@@ -669,7 +690,55 @@ export default function PanelBoxesPage() {
     }
   }
 
+  function openSelfPasswordModal() {
+    setSelfPwdModalOpen(true);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setUserMenuOpen(false);
+  }
+
+  function closeSelfPasswordModal() {
+    setSelfPwdModalOpen(false);
+    setSelfPwdNew("");
+    setSelfPwdConfirm("");
+    setSelfPwdError(null);
+    setSelfPwdLoading(false);
+    setShowSelfPwdNew(false);
+    setShowSelfPwdConfirm(false);
+  }
+
+  async function handleSelfPasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSelfPwdError(null);
+
+    if (!selfPwdNew || selfPwdNew.length < 6) {
+      setSelfPwdError("Password minimal 6 karakter.");
+      return;
+    }
+    if (selfPwdNew !== selfPwdConfirm) {
+      setSelfPwdError("Konfirmasi password tidak sama.");
+      return;
+    }
+
+    setSelfPwdLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: selfPwdNew });
+    if (error) {
+      setSelfPwdError(error.message || "Gagal mengubah password.");
+      setSelfPwdLoading(false);
+      return;
+    }
+    closeSelfPasswordModal();
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/panel/login");
+  }
+
   // --- Render ---
+
+  const displayName = profile?.username || currentUserEmail || "Akun Panel";
 
   return (
     <main className="min-h-screen flex items-start justify-center px-4 py-10">
@@ -688,11 +757,46 @@ export default function PanelBoxesPage() {
               rarity saat membeli box 1 / 2 / 3 credit.
             </p>
           </div>
-          {profile && profile.role === "CS" && (
-            <span className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-300">
-              Mode baca
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {profile && profile.role === "CS" && (
+              <span className="text-[11px] px-3 py-1 rounded-full border border-slate-600 text-slate-300">
+                Mode baca
+              </span>
+            )}
+
+            {/* Dropdown akun */}
+            <div className="relative inline-flex">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="inline-flex items-center rounded-lg border border-slate-600 px-3 py-2 text-xs font-medium hover:bg-slate-800 transition"
+              >
+                <span className="mr-2 truncate max-w-[160px]">{displayName}</span>
+                <span className="text-slate-400">▾</span>
+              </button>
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-700 bg-slate-900/95 shadow-lg text-xs overflow-hidden z-20">
+                  <button
+                    type="button"
+                    onClick={openSelfPasswordModal}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                  >
+                    Ubah password saya
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      void handleLogout();
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-300"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {loading && (
@@ -1245,6 +1349,89 @@ export default function PanelBoxesPage() {
                     : rewardModalMode === "create"
                     ? "Tambah Hadiah"
                     : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {selfPwdModalOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeSelfPasswordModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">Ubah password akun saya</h2>
+            <form onSubmit={handleSelfPasswordSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="self-pwd-new">
+                  Password baru
+                </label>
+                <div className="relative">
+                  <input
+                    id="self-pwd-new"
+                    type={showSelfPwdNew ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdNew}
+                    onChange={(e) => setSelfPwdNew(e.target.value)}
+                    placeholder="min. 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSelfPwdNew((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {showSelfPwdNew ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="self-pwd-confirm">
+                  Konfirmasi password baru
+                </label>
+                <div className="relative">
+                  <input
+                    id="self-pwd-confirm"
+                    type={showSelfPwdConfirm ? "text" : "password"}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    value={selfPwdConfirm}
+                    onChange={(e) => setSelfPwdConfirm(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSelfPwdConfirm((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs border border-slate-600 rounded px-2 py-1 hover:bg-slate-800"
+                  >
+                    {showSelfPwdConfirm ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+              </div>
+
+              {selfPwdError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">
+                  {selfPwdError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeSelfPasswordModal}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs hover:bg-slate-800 transition"
+                  disabled={selfPwdLoading}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={selfPwdLoading}
+                  className="rounded-lg bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {selfPwdLoading ? "Menyimpan..." : "Simpan"}
                 </button>
               </div>
             </form>
