@@ -61,8 +61,18 @@ export default function PanelLedgerPage() {
   const [appliedKind, setAppliedKind] = useState<"ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE">("ALL");
 
   function applyFilters() {
+    const isEmpty = filterUsername.trim() === "" && filterKind === "ALL";
+
     setAppliedUsername(filterUsername.trim());
     setAppliedKind(filterKind);
+
+    // setiap apply, kembali ke halaman 1
+    setPage(1);
+
+    // jika semua filter kosong → reload dari DB
+    if (isEmpty) {
+      void fetchRows();
+    }
   }
 
   // ---- user header dropdown + self password modal ----
@@ -74,6 +84,11 @@ export default function PanelLedgerPage() {
   const [selfPwdLoading, setSelfPwdLoading] = useState(false);
   const [showSelfPwdNew, setShowSelfPwdNew] = useState(false);
   const [showSelfPwdConfirm, setShowSelfPwdConfirm] = useState(false);
+
+  // ---- pagination ----
+  const PAGE_SIZE = 25;
+  const FETCH_CHUNK = 1000;
+  const [page, setPage] = useState(1);
 
   function openSelfPasswordModal() {
     setSelfPwdModalOpen(true);
@@ -170,14 +185,19 @@ export default function PanelLedgerPage() {
     loadProfile();
   }, [router]);
 
-  // ---- load ledger rows ----
-  useEffect(() => {
-    async function loadRows() {
-      if (!profile) return;
-      setLoadingRows(true);
-      setRowsError(null);
+  // ---- load ledger rows (ambil semua, bertahap) ----
+  async function fetchRows() {
+    if (!profile) return;
+    setLoadingRows(true);
+    setRowsError(null);
 
-      try {
+    try {
+      // ambil semua baris bertahap
+      let from = 0;
+      let batch: LedgerBase[] = [];
+      const allBaseRows: LedgerBase[] = [];
+
+      do {
         const { data, error } = await supabase
           .from("credit_ledger")
           .select(`
@@ -193,55 +213,66 @@ export default function PanelLedgerPage() {
           `)
           .eq("tenant_id", profile.tenant_id)
           .order("created_at", { ascending: false })
-          .limit(200);
+          .range(from, from + FETCH_CHUNK - 1);
 
-        if (error) {
-          setRowsError("Gagal membaca data ledger.");
-          setLoadingRows(false);
-          return;
-        }
+        if (error) throw error;
+        batch = (data || []) as LedgerBase[];
+        allBaseRows.push(...batch);
+        from += FETCH_CHUNK;
+      } while (batch.length === FETCH_CHUNK);
 
-        const baseRows = (data || []) as LedgerBase[];
-        if (baseRows.length === 0) {
-          setRows([]);
-          setLoadingRows(false);
-          return;
-        }
-
-        const memberIds = Array.from(new Set(baseRows.map(r => r.member_profile_id).filter((v): v is string => !!v)));
-        const creatorIds = Array.from(new Set(baseRows.map(r => r.created_by_profile_id).filter((v): v is string => !!v)));
-
-        const [
-          { data: memberData },
-          { data: creatorData },
-        ] = await Promise.all([
-          memberIds.length
-            ? supabase.from("profiles").select("id, username").in("id", memberIds)
-            : Promise.resolve({ data: [] as MemberShort[] }),
-          creatorIds.length
-            ? supabase.from("profiles").select("id, username").in("id", creatorIds)
-            : Promise.resolve({ data: [] as CreatorShort[] }),
-        ]);
-
-        const memberMap = new Map((memberData || []).map((m) => [m.id, m as MemberShort]));
-        const creatorMap = new Map((creatorData || []).map((c) => [c.id, c as CreatorShort]));
-
-        const fullRows: LedgerRow[] = baseRows.map((r) => ({
-          ...r,
-          member: r.member_profile_id ? memberMap.get(r.member_profile_id) || null : null,
-          created_by: r.created_by_profile_id ? creatorMap.get(r.created_by_profile_id) || null : null,
-        }));
-
-        setRows(fullRows);
+      if (allBaseRows.length === 0) {
+        setRows([]);
         setLoadingRows(false);
-      } catch (err) {
-        console.error(err);
-        setRowsError("Terjadi kesalahan saat membaca ledger.");
-        setLoadingRows(false);
+        return;
       }
-    }
 
-    loadRows();
+      const memberIds = Array.from(
+        new Set(allBaseRows.map(r => r.member_profile_id).filter((v): v is string => !!v))
+      );
+      const creatorIds = Array.from(
+        new Set(allBaseRows.map(r => r.created_by_profile_id).filter((v): v is string => !!v))
+      );
+
+      const [
+        { data: memberData, error: memberErr },
+        { data: creatorData, error: creatorErr },
+      ] = await Promise.all([
+        memberIds.length
+          ? supabase.from("profiles").select("id, username").in("id", memberIds)
+          : Promise.resolve({ data: [] as MemberShort[], error: null }),
+        creatorIds.length
+          ? supabase.from("profiles").select("id, username").in("id", creatorIds)
+          : Promise.resolve({ data: [] as CreatorShort[], error: null }),
+      ]);
+
+      if (memberErr || creatorErr) {
+        setRowsError("Gagal membaca data tambahan (member/pembuat).");
+        setLoadingRows(false);
+        return;
+      }
+
+      const memberMap = new Map((memberData || []).map((m) => [m.id, m as MemberShort]));
+      const creatorMap = new Map((creatorData || []).map((c) => [c.id, c as CreatorShort]));
+
+      const fullRows: LedgerRow[] = allBaseRows.map((r) => ({
+        ...r,
+        member: r.member_profile_id ? memberMap.get(r.member_profile_id) || null : null,
+        created_by: r.created_by_profile_id ? creatorMap.get(r.created_by_profile_id) || null : null,
+      }));
+
+      setRows(fullRows);
+      setLoadingRows(false);
+    } catch (err) {
+      console.error(err);
+      setRowsError("Terjadi kesalahan saat membaca ledger.");
+      setLoadingRows(false);
+    }
+  }
+
+  // panggil sekali saat profil sudah ada
+  useEffect(() => {
+    if (profile) void fetchRows();
   }, [profile]);
 
   // ---- applied filtering (NOT live) ----
@@ -257,6 +288,21 @@ export default function PanelLedgerPage() {
   }, [rows, appliedKind, appliedUsername]);
 
   const displayName = profile?.username || currentUserEmail || "Akun Panel";
+
+  // pastikan page valid saat jumlah hasil berubah
+  useEffect(() => {
+    const total = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+    if (page > total) setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredRows.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const startIndex = (page - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, filteredRows.length);
+
+  const pagedRows = useMemo(() => {
+    return filteredRows.slice(startIndex, endIndex);
+  }, [filteredRows, startIndex, endIndex, page]);
 
   // ---- render ----
   if (loadingProfile) {
@@ -405,7 +451,7 @@ export default function PanelLedgerPage() {
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => (
+              pagedRows.map((row) => (
                 <tr key={row.id} className="border-t border-slate-800/80 hover:bg-slate-900/60">
                   <td className="px-4 py-2 text-[11px]">{formatDateTime(row.created_at)}</td>
                   <td className="px-2 py-2 text-[11px]">{row.member?.username || "—"}</td>
@@ -425,6 +471,35 @@ export default function PanelLedgerPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="mt-3 flex flex-col gap-2 items-center justify-between md:flex-row">
+        <p className="text-[11px] text-slate-500">
+          Menampilkan {filteredRows.length === 0 ? 0 : startIndex + 1}
+          –{endIndex} dari {filteredRows.length} hasil (25/baris)
+        </p>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            ‹ Prev
+          </button>
+          <span className="text-[11px] text-slate-300">
+            Halaman {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            Next ›
+          </button>
+        </div>
       </div>
 
       {/* Modal Ubah Password Saya */}
