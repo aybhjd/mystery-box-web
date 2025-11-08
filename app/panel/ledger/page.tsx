@@ -346,7 +346,7 @@ export default function PanelLedgerPage() {
           </h1>
           <p className="text-xs text-slate-400">
             Riwayat semua mutasi credit (topup, adjust, dan pembelian box)
-            di tenant ini. Detail box bisa dilihat di menu History.
+            di WEB ini. Detail box bisa dilihat di menu History.
           </p>
         </div>
 
