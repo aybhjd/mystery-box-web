@@ -291,13 +291,13 @@ export default function PanelBoxesPage() {
   function rarityBadge(r: RarityRow) {
     // Pill dengan border berwarna + ring + subtle outer glow.
     const base =
-      "inline-flex items-center rounded-full px-2 py-1 text-sm font-bold";
+      "inline-flex items-center rounded-full px-1.5 py-.5 text-sm font-bold";
 
     switch (r.code) {
       case "COMMON":
         return (
           <span
-            className={`${base} border-2 border-emerald-400/90 ring-1 ring-emerald-500/30 bg-emerald-900/30 text-emerald-100 shadow-[0_0_0_3px_rgba(16,185,129,.18)]`}
+            className={`${base} border-1 border-emerald-400/90 ring-.5 ring-emerald-500/30 bg-emerald-900/30 text-emerald-100 shadow-[0_0_0_3px_rgba(16,185,129,.18)]`}
           >
             Common
           </span>
@@ -306,7 +306,7 @@ export default function PanelBoxesPage() {
       case "RARE":
         return (
           <span
-            className={`${base} border-2 border-sky-400/90 ring-1 ring-sky-500/30 bg-sky-900/30 text-sky-100 shadow-[0_0_0_3px_rgba(56,189,248,.18)]`}
+            className={`${base} border-1 border-sky-400/90 ring-.5 ring-sky-500/30 bg-sky-900/30 text-sky-100 shadow-[0_0_0_3px_rgba(56,189,248,.18)]`}
           >
             Rare
           </span>
@@ -315,7 +315,7 @@ export default function PanelBoxesPage() {
       case "EPIC":
         return (
           <span
-            className={`${base} border-2 border-fuchsia-400/90 ring-1 ring-fuchsia-500/30 bg-purple-900/30 text-fuchsia-100 shadow-[0_0_0_3px_rgba(232,121,249,.18)]`}
+            className={`${base} border-1 border-fuchsia-400/90 ring-.5 ring-fuchsia-500/30 bg-purple-900/30 text-fuchsia-100 shadow-[0_0_0_3px_rgba(232,121,249,.18)]`}
           >
             Epic
           </span>
@@ -324,7 +324,7 @@ export default function PanelBoxesPage() {
       case "SUPREME":
         return (
           <span
-            className={`${base} border-2 border-yellow-400/90 ring-1 ring-yellow-500/30 bg-amber-900/30 text-yellow-100 shadow-[0_0_0_3px_rgba(250,204,21,.18)]`}
+            className={`${base} border-1 border-yellow-400/90 ring-.5 ring-yellow-500/30 bg-amber-900/30 text-yellow-100 shadow-[0_0_0_3px_rgba(250,204,21,.18)]`}
           >
             Supreme
           </span>
@@ -333,7 +333,7 @@ export default function PanelBoxesPage() {
       case "LEGENDARY":
         return (
           <span
-            className={`${base} border-2 border-rose-400/90 ring-1 ring-rose-500/30 bg-rose-900/30 text-rose-100 shadow-[0_0_0_3px_rgba(244,63,94,.18)]`}
+            className={`${base} border-1 border-rose-400/90 ring-.5 ring-rose-500/30 bg-rose-900/30 text-rose-100 shadow-[0_0_0_3px_rgba(244,63,94,.18)]`}
           >
             Legendary
           </span>
@@ -342,8 +342,8 @@ export default function PanelBoxesPage() {
       case "SPECIAL_LEGENDARY":
         // Border gradasi + teks gradasi, inner pill tetap gelap.
         return (
-          <span className="inline-flex rounded-full p-[2px] bg-[linear-gradient(90deg,#22d3ee,#60a5fa,#a78bfa,#fde047,#fb923c)] shadow-[0_0_0_3px_rgba(59,130,246,.20)]">
-            <span className={`${base} rounded-full bg-slate-900/60 ring-1 ring-white/10`}>
+          <span className="inline-flex rounded-full p-[1px] bg-[linear-gradient(90deg,#22d3ee,#60a5fa,#a78bfa,#fde047,#fb923c)] shadow-[0_0_0_3px_rgba(59,130,246,.20)]">
+            <span className={`${base} rounded-full bg-slate-900/60 ring-.5 ring-white/10`}>
               <span className="bg-clip-text text-transparent bg-[linear-gradient(90deg,#22d3ee,#60a5fa,#a78bfa,#fde047,#fb923c)]">
                 Special Legendary
               </span>
