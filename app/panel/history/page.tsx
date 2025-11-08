@@ -76,10 +76,27 @@ export default function PanelHistoryPage() {
   const [appliedStatus, setAppliedStatus] = useState<"ALL" | "PURCHASED" | "OPENED" | "EXPIRED">("ALL");
   const [appliedTier, setAppliedTier] = useState<"ALL" | "1" | "2" | "3">("ALL");
 
+  // ---- pagination (25 rows) ----
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(1);
+
   function applyFilters() {
+    const isEmpty =
+      searchUsernameInput.trim() === "" &&
+      statusInput === "ALL" &&
+      tierInput === "ALL";
+
     setAppliedUsername(searchUsernameInput.trim());
     setAppliedStatus(statusInput);
     setAppliedTier(tierInput);
+
+    // reset ke halaman pertama setiap kali apply filter
+    setPage(1);
+
+    // Permintaanmu: klik/enter filter kosong => reload data dari DB
+    if (isEmpty) {
+      void fetchRows();
+    }
   }
 
   // ---- user header dropdown + self password modal ----
@@ -189,93 +206,95 @@ export default function PanelHistoryPage() {
   }, [router]);
 
   // ---- load history rows ----
-  useEffect(() => {
-    async function loadRows() {
-      if (!profile) return;
-      setLoadingRows(true);
-      setRowsError(null);
+  async function fetchRows() {
+    if (!profile) return;
+    setLoadingRows(true);
+    setRowsError(null);
 
-      try {
-        const { data: txData, error: txErr } = await supabase
-          .from("box_transactions")
-          .select(`
-            id,
-            member_profile_id,
-            credit_tier,
-            credit_spent,
-            status,
-            expires_at,
-            opened_at,
-            processed,
-            processed_at,
-            processed_by_profile_id,
-            created_at,
-            rarity_id,
-            reward_id
-          `)
-          .eq("tenant_id", profile.tenant_id)
-          .order("created_at", { ascending: false })
-          .limit(100);
+    try {
+      const { data: txData, error: txErr } = await supabase
+        .from("box_transactions")
+        .select(`
+          id,
+          member_profile_id,
+          credit_tier,
+          credit_spent,
+          status,
+          expires_at,
+          opened_at,
+          processed,
+          processed_at,
+          processed_by_profile_id,
+          created_at,
+          rarity_id,
+          reward_id
+        `)
+        .eq("tenant_id", profile.tenant_id)
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-        if (txErr) {
-          setRowsError("Gagal membaca history transaksi.");
-          setLoadingRows(false);
-          return;
-        }
-
-        const baseRows = (txData || []) as TxBase[];
-        if (baseRows.length === 0) {
-          setRows([]);
-          setLoadingRows(false);
-          return;
-        }
-
-        const memberIds = Array.from(new Set(baseRows.map((r) => r.member_profile_id)));
-        const rarityIds = Array.from(new Set(baseRows.map((r) => r.rarity_id)));
-        const rewardIds = Array.from(new Set(baseRows.map((r) => r.reward_id).filter((v): v is string => !!v)));
-
-        const [
-          { data: memberData, error: memberErr },
-          { data: rarityData, error: rarityErr },
-          { data: rewardData, error: rewardErr },
-        ] = await Promise.all([
-          memberIds.length
-            ? supabase.from("profiles").select("id, username").in("id", memberIds)
-            : Promise.resolve({ data: [] as MemberShort[], error: null }),
-          rarityIds.length
-            ? supabase.from("box_rarities").select("id, code, name").in("id", rarityIds)
-            : Promise.resolve({ data: [] as RarityShort[], error: null }),
-          rewardIds.length
-            ? supabase.from("box_rewards").select("id, label, reward_type, amount").in("id", rewardIds)
-            : Promise.resolve({ data: [] as RewardShort[], error: null }),
-        ]);
-
-        if (memberErr || rarityErr || rewardErr) {
-          setRowsError("Gagal membaca data tambahan (member/rarity/reward).");
-          setLoadingRows(false);
-          return;
-        }
-
-        const memberMap = new Map((memberData || []).map((m) => [m.id, m as MemberShort]));
-        const rarityMap = new Map((rarityData || []).map((r) => [r.id, r as RarityShort]));
-        const rewardMap = new Map((rewardData || []).map((r) => [r.id, r as RewardShort]));
-
-        const fullRows: HistoryRow[] = baseRows.map((r) => ({
-          ...r,
-          member: memberMap.get(r.member_profile_id) || null,
-          rarity: rarityMap.get(r.rarity_id) || null,
-          reward: r.reward_id ? rewardMap.get(r.reward_id) || null : null,
-        }));
-
-        setRows(fullRows);
+      if (txErr) {
+        setRowsError("Gagal membaca history transaksi.");
         setLoadingRows(false);
-      } catch (err) {
-        console.error(err);
-        setRowsError("Terjadi kesalahan saat membaca history transaksi.");
-        setLoadingRows(false);
+        return;
       }
+
+      const baseRows = (txData || []) as TxBase[];
+      if (baseRows.length === 0) {
+        setRows([]);
+        setLoadingRows(false);
+        return;
+      }
+
+      const memberIds = Array.from(new Set(baseRows.map((r) => r.member_profile_id)));
+      const rarityIds = Array.from(new Set(baseRows.map((r) => r.rarity_id)));
+      const rewardIds = Array.from(new Set(baseRows.map((r) => r.reward_id).filter((v): v is string => !!v)));
+
+      const [
+        { data: memberData, error: memberErr },
+        { data: rarityData, error: rarityErr },
+        { data: rewardData, error: rewardErr },
+      ] = await Promise.all([
+        memberIds.length
+          ? supabase.from("profiles").select("id, username").in("id", memberIds)
+          : Promise.resolve({ data: [] as MemberShort[], error: null }),
+        rarityIds.length
+          ? supabase.from("box_rarities").select("id, code, name").in("id", rarityIds)
+          : Promise.resolve({ data: [] as RarityShort[], error: null }),
+        rewardIds.length
+          ? supabase.from("box_rewards").select("id, label, reward_type, amount").in("id", rewardIds)
+          : Promise.resolve({ data: [] as RewardShort[], error: null }),
+      ]);
+
+      if (memberErr || rarityErr || rewardErr) {
+        setRowsError("Gagal membaca data tambahan (member/rarity/reward).");
+        setLoadingRows(false);
+        return;
+      }
+
+      const memberMap = new Map((memberData || []).map((m) => [m.id, m as MemberShort]));
+      const rarityMap = new Map((rarityData || []).map((r) => [r.id, r as RarityShort]));
+      const rewardMap = new Map((rewardData || []).map((r) => [r.id, r as RewardShort]));
+
+      const fullRows: HistoryRow[] = baseRows.map((r) => ({
+        ...r,
+        member: memberMap.get(r.member_profile_id) || null,
+        rarity: rarityMap.get(r.rarity_id) || null,
+        reward: r.reward_id ? rewardMap.get(r.reward_id) || null : null,
+      }));
+
+      setRows(fullRows);
+      setLoadingRows(false);
+    } catch (err) {
+      console.error(err);
+      setRowsError("Terjadi kesalahan saat membaca history transaksi.");
+      setLoadingRows(false);
     }
-    loadRows();
+  }
+
+  // panggil sekali saat profil sudah ada
+  useEffect(() => {
+    if (profile) void fetchRows();
   }, [profile]);
 
   // ---- applied filtering (NOT live) ----
@@ -290,6 +309,21 @@ export default function PanelHistoryPage() {
       return true;
     });
   }, [rows, appliedStatus, appliedTier, appliedUsername]);
+
+  // clamp page jika jumlah hasil berubah
+  useEffect(() => {
+    const total = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+    if (page > total) setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredRows.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const startIndex = (page - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, filteredRows.length);
+
+  const pagedRows = useMemo(() => {
+    return filteredRows.slice(startIndex, endIndex);
+  }, [filteredRows, startIndex, endIndex, page]);
 
   function formatDateTime(s?: string | null) {
     if (!s) return "-";
@@ -504,7 +538,7 @@ export default function PanelHistoryPage() {
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => {
+              pagedRows.map((row) => {
                 const rarityText = row.rarity ? `${row.rarity.name} (${row.rarity.code})` : "-";
                 let rewardText = "-";
                 if (row.reward) {
@@ -552,6 +586,35 @@ export default function PanelHistoryPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="mt-3 flex flex-col gap-2 items-center justify-between md:flex-row">
+        <p className="text-[11px] text-slate-500">
+          Menampilkan {filteredRows.length === 0 ? 0 : startIndex + 1}
+          –{endIndex} dari {filteredRows.length} hasil (25/baris)
+        </p>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            ‹ Prev
+          </button>
+          <span className="text-[11px] text-slate-300">
+            Halaman {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            Next ›
+          </button>
+        </div>
       </div>
 
       {/* Modal Ubah Password Saya */}
