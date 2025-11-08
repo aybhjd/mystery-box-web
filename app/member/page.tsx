@@ -52,6 +52,17 @@ type InventoryBox = {
   rarity_id: string | null;
 };
 
+type OpenRow = {
+  id: string;
+  opened_at: string;
+  credit_tier: number;
+  rarity_id: string | null;
+  reward_id: string | null;
+  processed: boolean;        // <— baru
+  processed_at: string | null; // <— baru
+};
+
+
 /* =========================
    Helpers
 ========================= */
@@ -466,11 +477,10 @@ export default function MemberHomePage() {
   const [rarityMap, setRarityMap] = useState< Record<string, { code: string; name: string; color_key: string; sort_order?: number }> >({});
 
   // ===== Histories state =====
-  type TopupRow = { created_at: string; amount: number; note?: string | null; source?: string | null };
-
   const [histDate, setHistDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [histLoading, setHistLoading] = useState(false);
   const [histError, setHistError] = useState<string | null>(null);
+  const [opensHist, setOpensHist] = useState<OpenRow[]>([]);
 
   const [topups, setTopups] = useState<TopupRow[]>([]);
   const [purchasesHist, setPurchasesHist] = useState<Array<{ id:string; created_at:string; credit_tier:number; rarity_id:string|null; status:string }>>([]);
@@ -531,7 +541,16 @@ export default function MemberHomePage() {
           .not("opened_at", "is", null)
           .gte("opened_at", from).lte("opened_at", to)
           .order("opened_at", { ascending: false });
-        const openedRows = (rOpen.data ?? []) as any[];
+
+        const openedRows: OpenRow[] = (rOpen.data ?? []).map((x: any) => ({
+          id: x.id,
+          opened_at: x.opened_at,
+          credit_tier: x.credit_tier,
+          rarity_id: x.rarity_id,
+          reward_id: x.reward_id,
+          processed: !!x.processed,
+          processed_at: x.processed_at ?? null,
+        }));
 
         // ambil label reward (optional, kalau FK ada)
         const ids = Array.from(new Set(openedRows.map(x => x.reward_id).filter(Boolean)));
