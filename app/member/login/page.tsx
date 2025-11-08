@@ -53,7 +53,7 @@ export default function MemberLoginPage() {
           <p className="text-xs uppercase tracking-[0.25em] text-purple-300/70">
             Member Site
           </p>
-          <h1 className="text-2xl font-semibold">Masuk ke Dunia Fantasy</h1>
+          <h1 className="text-2xl font-semibold">Masuk ke MYSTERY BOX</h1>
           <p className="text-sm text-slate-200/80">
             Login dengan username &amp; password untuk membuka Mystery Box.
           </p>
