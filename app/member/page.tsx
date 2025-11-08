@@ -658,7 +658,7 @@ export default function MemberHomePage() {
 
   const loadRarityInfo = async (rarityId: string) => {
     const rar = rarityMap[rarityId];
-    setRarityInfo({ open: true, loading: false, rarityId, rows });
+    setRarityInfo({ open:true, loading:true, rarityId, title: rar ? `Drop ${rar.name}` : "Drop Reward", rows: [] });
     const { data, error } = await supabase
       .from("box_rewards")
       .select("label, reward_type, amount, gimmick_probability, is_active")
