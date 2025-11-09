@@ -57,14 +57,25 @@ export default function PanelLedgerPage() {
   // ---- filter (staged -> applied, NOT live) ----
   const [filterUsername, setFilterUsername] = useState("");
   const [filterKind, setFilterKind] = useState<"ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE">("ALL");
+  const [filterDateStart, setFilterDateStart] = useState<string>(""); // YYYY-MM-DD
+  const [filterDateEnd, setFilterDateEnd] = useState<string>("");     // YYYY-MM-DD
+
   const [appliedUsername, setAppliedUsername] = useState("");
   const [appliedKind, setAppliedKind] = useState<"ALL" | "TOPUP" | "ADJUSTMENT" | "BOX_PURCHASE">("ALL");
+  const [appliedDateStart, setAppliedDateStart] = useState<string>("");
+  const [appliedDateEnd, setAppliedDateEnd] = useState<string>("");
 
   function applyFilters() {
-    const isEmpty = filterUsername.trim() === "" && filterKind === "ALL";
+    const isEmpty =
+      filterUsername.trim() === "" &&
+      filterKind === "ALL" &&
+      !filterDateStart &&
+      !filterDateEnd;
 
     setAppliedUsername(filterUsername.trim());
     setAppliedKind(filterKind);
+    setAppliedDateStart(filterDateStart);
+    setAppliedDateEnd(filterDateEnd);
 
     // setiap apply, kembali ke halaman 1
     setPage(1);
@@ -277,6 +288,14 @@ export default function PanelLedgerPage() {
 
   // ---- applied filtering (NOT live) ----
   const filteredRows = useMemo(() => {
+    const hasDateFilter = !!appliedDateStart || !!appliedDateEnd;
+    const startMs = appliedDateStart
+      ? new Date(`${appliedDateStart}T00:00:00`).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const endMs = appliedDateEnd
+      ? new Date(`${appliedDateEnd}T23:59:59.999`).getTime()
+      : Number.POSITIVE_INFINITY;
+
     return rows
       .filter((row) => ["TOPUP", "ADJUSTMENT", "BOX_PURCHASE"].includes(row.kind))
       .filter((row) => (appliedKind === "ALL" ? true : row.kind === appliedKind))
@@ -284,8 +303,13 @@ export default function PanelLedgerPage() {
         if (!appliedUsername) return true;
         const u = (row.member?.username || "").toLowerCase();
         return u.includes(appliedUsername.toLowerCase());
+      })
+      .filter((row) => {
+        if (!hasDateFilter) return true;
+        const created = new Date(row.created_at).getTime();
+        return created >= startMs && created <= endMs;
       });
-  }, [rows, appliedKind, appliedUsername]);
+  }, [rows, appliedKind, appliedUsername, appliedDateStart, appliedDateEnd]);
 
   const displayName = profile?.username || currentUserEmail || "Akun Panel";
 
@@ -377,8 +401,8 @@ export default function PanelLedgerPage() {
 
       {/* Filter bar (NOT live) */}
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end">
-          <div className="flex-1">
+        <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end md:flex-wrap">
+          <div className="flex-1 min-w-[240px]">
             <label className="mb-1 block text-xs text-slate-400">Filter username member</label>
             <div className="flex gap-2">
               <input
@@ -400,15 +424,46 @@ export default function PanelLedgerPage() {
                 <option value="ADJUSTMENT">Adjustment (-)</option>
                 <option value="BOX_PURCHASE">Beli box</option>
               </select>
-              <button
-                type="button"
-                onClick={applyFilters}
-                className="inline-flex items-center rounded-lg border border-sky-500/70 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/10 transition"
-                title="Cari"
-              >
-                Search
-              </button>
             </div>
+          </div>
+
+          {/* Date range */}
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Tanggal mulai</label>
+              <input
+                type="date"
+                value={filterDateStart}
+                onChange={(e) => setFilterDateStart(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters();
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Tanggal akhir</label>
+              <input
+                type="date"
+                value={filterDateEnd}
+                onChange={(e) => setFilterDateEnd(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters();
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={applyFilters}
+              className="inline-flex items-center rounded-lg border border-sky-500/70 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/10 transition"
+              title="Cari"
+            >
+              Search
+            </button>
           </div>
         </div>
       </div>
